@@ -30,7 +30,6 @@ jobs:
             CHANGELOG.md \
             CONTRIBUTING.md \
             LICENSE \
-            QUICK-SETUP.md \
             -x '*.git*'
 
       - name: Create GitHub Release

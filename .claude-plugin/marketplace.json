@@ -1,0 +1,27 @@
+{
+  "name": "dotnet-nuget-proxy",
+  "owner": {
+    "name": "LogicLabs",
+    "email": "community@claude.ai"
+  },
+  "metadata": {
+    "description": "Claude Code plugins for .NET NuGet proxy authentication troubleshooting",
+    "version": "1.0.0",
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "dotnet-nuget-proxy",
+      "source": "./plugins/dotnet-nuget-proxy",
+      "description": "Diagnoses and fixes .NET NuGet proxy authentication issues in containerized and proxy-authenticated environments",
+      "version": "1.0.0",
+      "author": {
+        "name": "LogicLabs"
+      },
+      "license": "MIT",
+      "keywords": [".NET", "NuGet", "proxy", "authentication", "troubleshooting", "containerized", "enterprise"],
+      "category": "developer-tools",
+      "tags": ["dotnet", "nuget", "proxy", "troubleshooting"]
+    }
+  ]
+}

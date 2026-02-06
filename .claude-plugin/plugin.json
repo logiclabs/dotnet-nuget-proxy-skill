@@ -1,0 +1,28 @@
+{
+  "name": "dotnet-nuget-proxy",
+  "description": "Diagnoses and fixes .NET NuGet proxy authentication issues in containerized and proxy-authenticated environments. Provides custom proxy bridge, auto-starting wrapper scripts, and comprehensive troubleshooting.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Claude Code Community",
+    "email": "community@claude.ai"
+  },
+  "keywords": [
+    ".NET",
+    "NuGet",
+    "proxy",
+    "authentication",
+    "troubleshooting",
+    "development",
+    "containerized",
+    "enterprise"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/logiclabs/dotnet-nuget-proxy-skill"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/logiclabs/dotnet-nuget-proxy-skill#readme",
+  "bugs": {
+    "url": "https://github.com/logiclabs/dotnet-nuget-proxy-skill/issues"
+  }
+}

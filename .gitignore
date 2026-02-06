@@ -1,0 +1,59 @@
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+*.log.*
+/tmp/
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
+*~
+
+# Test artifacts
+test-project/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# NuGet
+*.nuget/
+packages/
+*.nupkg
+nuget.exe
+
+# .NET
+bin/
+obj/
+*.user
+*.userosscache
+*.suo
+*.cache
+
+# Plugin development
+.claude-dev/
+*.zip

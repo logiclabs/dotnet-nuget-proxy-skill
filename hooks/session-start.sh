@@ -23,20 +23,44 @@ FILES_DIR="$PLUGIN_DIR/skills/nuget-proxy-troubleshooting/files"
 
 echo "Setting up .NET NuGet proxy authentication..."
 
-# --- Step 1: Install .NET SDK if not present ---
+# --- Step 1: Detect required .NET SDK version from project files ---
+DOTNET_VERSION="8"
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+  # Look for TargetFramework in .csproj files to determine required SDK version
+  TFM=$(grep -rh '<TargetFramework>' "$CLAUDE_PROJECT_DIR"/*.csproj "$CLAUDE_PROJECT_DIR"/**/*.csproj 2>/dev/null \
+    | head -1 | grep -oP 'net\K[0-9]+' || true)
+  if [ -n "$TFM" ]; then
+    DOTNET_VERSION="$TFM"
+    echo "Detected .NET $DOTNET_VERSION from project files."
+  fi
+fi
+
+# --- Step 2: Install .NET SDK if not present ---
 if ! command -v dotnet &>/dev/null; then
-  echo "Installing .NET SDK from packages.microsoft.com..."
+  echo "Installing .NET SDK $DOTNET_VERSION from packages.microsoft.com..."
   curl -sSL https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb \
     -o /tmp/packages-microsoft-prod.deb
   dpkg -i /tmp/packages-microsoft-prod.deb
   apt-get update --allow-insecure-repositories 2>/dev/null
-  apt-get install -y --allow-unauthenticated dotnet-sdk-8.0 2>/dev/null
+  apt-get install -y --allow-unauthenticated dotnet-sdk-$DOTNET_VERSION.0 2>/dev/null
   echo ".NET SDK installed: $(dotnet --version)"
 else
-  echo ".NET SDK already installed: $(dotnet --version)"
+  # Check if the installed SDK matches the required version
+  INSTALLED=$(dotnet --list-sdks 2>/dev/null | grep -oP '^\K[0-9]+' | head -1 || true)
+  if [ -n "$INSTALLED" ] && [ "$INSTALLED" != "$DOTNET_VERSION" ]; then
+    echo "Installed .NET SDK is $INSTALLED but project requires $DOTNET_VERSION. Installing..."
+    curl -sSL https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb \
+      -o /tmp/packages-microsoft-prod.deb
+    dpkg -i /tmp/packages-microsoft-prod.deb 2>/dev/null
+    apt-get update --allow-insecure-repositories 2>/dev/null
+    apt-get install -y --allow-unauthenticated dotnet-sdk-$DOTNET_VERSION.0 2>/dev/null
+    echo ".NET SDK $DOTNET_VERSION installed: $(dotnet --version)"
+  else
+    echo ".NET SDK already installed: $(dotnet --version)"
+  fi
 fi
 
-# --- Step 2: Set up the credential provider and proxy ---
+# --- Step 3: Set up the credential provider and proxy ---
 if [ -f "$FILES_DIR/install-credential-provider.sh" ]; then
   source "$FILES_DIR/install-credential-provider.sh"
 else
@@ -45,7 +69,7 @@ else
   exit 0
 fi
 
-# --- Step 3: Persist env vars for the session ---
+# --- Step 4: Persist env vars for the session ---
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   echo "export _NUGET_UPSTREAM_PROXY=\"${_NUGET_UPSTREAM_PROXY:-}\"" >> "$CLAUDE_ENV_FILE"
   echo "export HTTPS_PROXY=\"${HTTPS_PROXY:-}\"" >> "$CLAUDE_ENV_FILE"

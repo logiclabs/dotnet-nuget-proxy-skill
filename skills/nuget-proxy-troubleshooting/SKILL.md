@@ -54,16 +54,31 @@ The hook:
 
 Follow these steps in order when the user wants to use .NET (if no SessionStart hook is configured):
 
-### Step 1: Check if .NET SDK is installed
+### Step 1: Detect required .NET version from the project
+
+**IMPORTANT**: Before installing any .NET SDK, check the project's `.csproj` or `.sln` files to determine the required version:
 
 ```bash
-dotnet --version
+# Find the TargetFramework in project files
+grep -rh '<TargetFramework>' *.csproj **/*.csproj 2>/dev/null
 ```
 
-If not installed, go to **Installing the .NET SDK** below.
-If installed, proceed to Step 2.
+- `net8.0` → install `dotnet-sdk-8.0`
+- `net9.0` → install `dotnet-sdk-9.0`
+- `net10.0` → install `dotnet-sdk-10.0`
 
-### Step 2: Check if NuGet proxy is set up
+If no project files exist yet (creating a new project), ask the user which .NET version to use or default to the latest LTS.
+
+### Step 2: Check if the correct .NET SDK is installed
+
+```bash
+dotnet --list-sdks
+```
+
+If the required version is not installed, go to **Installing the .NET SDK** below.
+If installed, proceed to Step 3.
+
+### Step 3: Check if NuGet proxy is set up
 
 ```bash
 # Is the credential provider installed?
@@ -79,7 +94,7 @@ If installed but proxy not running, start it:
 dotnet ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth.dll --start
 ```
 
-### Step 3: Use .NET normally
+### Step 4: Use .NET normally
 
 ```bash
 dotnet restore
@@ -93,7 +108,9 @@ dotnet run
 
 **CRITICAL**: Do NOT use `https://dot.net/v1/dotnet-install.sh` or any installer from `dot.net`. It redirects to `builds.dotnet.microsoft.com` which is **blocked** by the proxy allowlist and will return `403 host_not_allowed`.
 
-Install from `packages.microsoft.com` instead (this domain IS allowed):
+Install from `packages.microsoft.com` instead (this domain IS allowed).
+
+**IMPORTANT**: Match the SDK version to the project's `<TargetFramework>`. Check `.csproj` files first (see Step 1 above).
 
 ```bash
 # Download the Microsoft package repository configuration
@@ -103,16 +120,17 @@ curl -sSL https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-
 # Install the repository configuration
 dpkg -i /tmp/packages-microsoft-prod.deb
 
-# Update apt and install .NET SDK
+# Update apt and install .NET SDK (replace X with the version from project files)
 apt-get update --allow-insecure-repositories
-apt-get install -y --allow-unauthenticated dotnet-sdk-8.0
+apt-get install -y --allow-unauthenticated dotnet-sdk-X.0
 ```
+
+Common packages: `dotnet-sdk-8.0`, `dotnet-sdk-9.0`, `dotnet-sdk-10.0`
 
 Notes:
 - `curl` automatically uses the `HTTPS_PROXY` environment variable (already set in Claude Code web)
 - `apt-get` also respects `http_proxy`/`https_proxy` env vars
 - The `--allow-insecure-repositories` and `--allow-unauthenticated` flags are needed because GPG key verification may fail through the proxy
-- For .NET 9.0, replace `dotnet-sdk-8.0` with `dotnet-sdk-9.0`
 
 ### Verify installation
 

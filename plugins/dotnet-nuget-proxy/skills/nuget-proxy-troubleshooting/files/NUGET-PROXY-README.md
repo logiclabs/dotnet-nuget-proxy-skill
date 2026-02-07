@@ -41,10 +41,6 @@ The C# credential provider plugin:
   - `nuget-plugin-proxy-auth.csproj` - .NET 8.0 project file
 - **`install-credential-provider.sh`** - Install script (compile, install, configure)
 - **`WHY-PROXY-BRIDGE-NEEDED.md`** - Technical analysis of why this approach is needed
-- **`nuget-proxy.py`** - Legacy standalone Python proxy (still functional)
-- **`dotnet-with-proxy.sh`** - Legacy wrapper script (still functional)
-- **`setup-dotnet-alias.sh`** - Legacy alias helper (still functional)
-- **`NuGet.config`** - NuGet config for local proxy (not required with credential provider)
 
 ## Managing the Proxy
 

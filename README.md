@@ -94,10 +94,6 @@ You can also ask Claude naturally:
    - Starts the proxy daemon
    - No NuGet.Config changes needed
 
-3. **Legacy files** (still functional as fallback):
-   - `nuget-proxy.py` - Standalone Python proxy (no compilation needed)
-   - `dotnet-with-proxy.sh` - Wrapper script that auto-starts Python proxy
-
 ### Environment Variables
 
 | Variable | Purpose |
@@ -164,7 +160,6 @@ apt-get update && apt-get install -y dotnet-sdk-8.0
 
 - **.NET SDK 8.0+** (for compiling the credential provider)
 - **Claude Code** environment with proxy authentication
-- Python 3.x (only if using the legacy fallback)
 
 ## Contributing
 

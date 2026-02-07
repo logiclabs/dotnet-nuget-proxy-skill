@@ -39,20 +39,6 @@ dotnet build
 - **install-credential-provider.sh** - Installation and setup script
 - **~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/** - Compiled plugin (auto-discovered by NuGet)
 
-## Fallback: Python Proxy Bridge
-
-If the .NET SDK is not yet available to compile the C# plugin:
-
-```bash
-python3 nuget-proxy.py &
-HTTPS_PROXY=http://127.0.0.1:8888 dotnet restore
-```
-
-### Legacy Files (still functional)
-
-- **nuget-proxy.py** - Standalone Python proxy implementation
-- **dotnet-with-proxy.sh** - Wrapper script that auto-starts Python proxy
-
 ## When to Use
 
 Use this command when you encounter:

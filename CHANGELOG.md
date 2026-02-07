@@ -115,7 +115,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated hook (`pre-dotnet-restore.sh`) to detect C# credential provider
 - Updated all slash commands to lead with C# approach
 - Updated README.md and NUGET-PROXY-README.md for C# credential provider
-- Python proxy files (`nuget-proxy.py`, `dotnet-with-proxy.sh`) retained as legacy fallback
+- Removed Python proxy files (`nuget-proxy.py`, `dotnet-with-proxy.sh`, `setup-dotnet-alias.sh`, `NuGet.config`)
 
 ### Planned Features
 - Support for custom proxy ports

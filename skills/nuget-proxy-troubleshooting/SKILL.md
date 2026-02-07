@@ -61,10 +61,6 @@ dotnet run
    - Starts the proxy daemon
    - No NuGet.Config changes needed
 
-3. **nuget-proxy.py** - Original standalone Python proxy (legacy, still works)
-
-4. **dotnet-with-proxy.sh** - Wrapper script (legacy, use credential provider instead)
-
 ### Manual Proxy Control
 
 ```bash

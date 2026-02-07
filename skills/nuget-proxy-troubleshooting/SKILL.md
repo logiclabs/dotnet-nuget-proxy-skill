@@ -173,7 +173,7 @@ Where `<plugin-files-dir>` is the directory containing `install-credential-provi
 
 This script:
 1. Captures the original upstream proxy URL from `$HTTPS_PROXY`
-2. Compiles the C# plugin via `dotnet publish` (using the upstream proxy for NuGet SDK deps)
+2. Compiles the C# plugin via `dotnet publish` (offline — uses local SDK packs, no network needed)
 3. Installs to `~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/` for auto-discovery
 4. Sets `HTTPS_PROXY` to `http://127.0.0.1:8888` (the local proxy)
 5. Starts the proxy daemon

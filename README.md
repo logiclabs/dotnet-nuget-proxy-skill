@@ -41,7 +41,43 @@ A C# NuGet credential provider:
 git clone https://github.com/logiclabs/dotnet-nuget-proxy-skill ~/.claude/plugins/dotnet-nuget-proxy
 ```
 
-## Quick Start for a New Session
+## Automatic Setup (SessionStart Hook)
+
+For .NET projects, add a SessionStart hook so the SDK and proxy are ready automatically when a Claude Code web session starts.
+
+**1. Clone the plugin into your project:**
+
+```bash
+mkdir -p .claude/plugins
+git clone https://github.com/logiclabs/dotnet-nuget-proxy-skill .claude/plugins/dotnet-nuget-proxy-skill
+```
+
+**2. Register the hook in `.claude/settings.json`:**
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/plugins/dotnet-nuget-proxy-skill/plugins/dotnet-nuget-proxy/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**3. Commit both to your repo.** All future Claude Code web sessions will have .NET ready automatically.
+
+The hook only runs in web sessions (skips on desktop). It installs the .NET SDK, compiles the credential provider, starts the proxy, and persists env vars for the session.
+
+---
+
+## Manual Setup for a New Session
 
 ### 1. Install .NET SDK (if not already installed)
 

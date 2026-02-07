@@ -16,9 +16,43 @@ Use this skill whenever the user wants to:
 - Create a new .NET project in the web environment
 - Troubleshoot any .NET or NuGet connectivity issues
 
-## Decision Flow
+## Automatic Setup via SessionStart Hook
 
-Follow these steps in order when the user wants to use .NET:
+For projects that use .NET regularly, a SessionStart hook can automatically install the SDK and configure the proxy when a Claude Code web session starts. This means `dotnet restore` just works from the first command.
+
+To set this up in a project, add to `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/plugins/dotnet-nuget-proxy-skill/plugins/dotnet-nuget-proxy/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The path above assumes the plugin was cloned to `.claude/plugins/dotnet-nuget-proxy-skill/`. Adjust if installed elsewhere.
+
+The hook:
+- Only runs in Claude Code web sessions (skips on desktop)
+- Installs .NET SDK from `packages.microsoft.com` if not present
+- Compiles and installs the credential provider
+- Starts the proxy daemon
+- Persists env vars via `$CLAUDE_ENV_FILE`
+
+---
+
+## Manual Decision Flow
+
+Follow these steps in order when the user wants to use .NET (if no SessionStart hook is configured):
 
 ### Step 1: Check if .NET SDK is installed
 

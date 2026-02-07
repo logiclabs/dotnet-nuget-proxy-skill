@@ -30,7 +30,7 @@ To set this up in a project, add to `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/plugins/dotnet-nuget-proxy-skill/hooks/session-start.sh"
+            "command": "bash $CLAUDE_PROJECT_DIR/.claude/plugins/dotnet-nuget-proxy-skill/hooks/session-start.sh"
           }
         ]
       }

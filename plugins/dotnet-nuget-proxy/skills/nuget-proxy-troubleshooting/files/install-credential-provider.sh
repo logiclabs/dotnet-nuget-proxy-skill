@@ -2,10 +2,10 @@
 # Install the NuGet Proxy Credential Provider
 #
 # This script:
-#   1. Installs the credential provider plugin
-#   2. Saves the original upstream proxy URL
-#   3. Points HTTPS_PROXY to the local proxy (localhost:8888)
-#   4. Sets NUGET_PLUGIN_PATHS so NuGet discovers the plugin
+#   1. Compiles the C# credential provider plugin (first time only)
+#   2. Installs it to ~/.nuget/plugins/netcore/ for NuGet auto-discovery
+#   3. Saves the original upstream proxy URL
+#   4. Points HTTPS_PROXY to the local proxy (localhost:8888)
 #   5. Starts the proxy daemon
 #
 # After installation, `dotnet restore` works without wrapper scripts
@@ -15,7 +15,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_NAME="nuget-plugin-proxy-auth"
-PLUGIN_SOURCE="$SCRIPT_DIR/$PLUGIN_NAME"
+PLUGIN_SRC_DIR="$SCRIPT_DIR/${PLUGIN_NAME}-src"
 LOCAL_PROXY="http://127.0.0.1:8888"
 
 GREEN='\033[0;32m'
@@ -28,13 +28,13 @@ warn()  { echo -e "${YELLOW}[!!]${NC} $1"; }
 error() { echo -e "${RED}[ERR]${NC} $1"; }
 
 # --- Verify prerequisites ---
-if [ ! -f "$PLUGIN_SOURCE" ]; then
-    error "Plugin not found at: $PLUGIN_SOURCE"
+if [ ! -d "$PLUGIN_SRC_DIR" ]; then
+    error "Plugin source not found at: $PLUGIN_SRC_DIR"
     exit 1
 fi
 
-if ! command -v python3 &> /dev/null; then
-    error "Python 3 is required but not found"
+if ! command -v dotnet &> /dev/null; then
+    error ".NET SDK is required but not found"
     exit 1
 fi
 
@@ -62,35 +62,51 @@ if echo "$UPSTREAM_PROXY" | grep -qE "127\.0\.0\.1|localhost"; then
     fi
 fi
 
-# --- Install the plugin ---
-PLUGIN_DIR="$HOME/.nuget/plugins/netcore/$PLUGIN_NAME"
-mkdir -p "$PLUGIN_DIR"
-cp "$PLUGIN_SOURCE" "$PLUGIN_DIR/$PLUGIN_NAME"
-chmod +x "$PLUGIN_DIR/$PLUGIN_NAME"
-info "Plugin installed to: $PLUGIN_DIR"
+# --- Clean up any old installations ---
+OLD_PLUGIN_DIR="$HOME/.nuget/plugins/$PLUGIN_NAME"
+if [ -d "$OLD_PLUGIN_DIR" ] && [ ! -d "$OLD_PLUGIN_DIR/$PLUGIN_NAME" ]; then
+    rm -rf "$OLD_PLUGIN_DIR"
+    warn "Removed old plugin installation"
+fi
 
-# Also install to PATH for NuGet 6.13+ discovery
-LOCAL_BIN="$HOME/.local/bin"
-if [ -d "$LOCAL_BIN" ]; then
-    cp "$PLUGIN_SOURCE" "$LOCAL_BIN/$PLUGIN_NAME"
-    chmod +x "$LOCAL_BIN/$PLUGIN_NAME"
+# --- Compile the plugin (if needed) ---
+# Install to netcore dir - NuGet auto-discovers and launches via `dotnet <dll>`
+PLUGIN_DIR="$HOME/.nuget/plugins/netcore/$PLUGIN_NAME"
+PLUGIN_DLL="$PLUGIN_DIR/$PLUGIN_NAME.dll"
+
+if [ ! -f "$PLUGIN_DLL" ] || [ "$PLUGIN_SRC_DIR/Program.cs" -nt "$PLUGIN_DLL" ]; then
+    echo "Compiling credential provider..."
+    # Build using the upstream proxy (not localhost) so NuGet can fetch SDK deps
+    _NUGET_UPSTREAM_PROXY="$UPSTREAM_PROXY" \
+    HTTPS_PROXY="$UPSTREAM_PROXY" HTTP_PROXY="$UPSTREAM_PROXY" \
+    https_proxy="$UPSTREAM_PROXY" http_proxy="$UPSTREAM_PROXY" \
+    dotnet publish "$PLUGIN_SRC_DIR" \
+        -c Release \
+        -o "$PLUGIN_DIR" \
+        --nologo \
+        -v quiet 2>&1
+    if [ $? -ne 0 ]; then
+        error "Failed to compile credential provider"
+        exit 1
+    fi
+    info "Compiled plugin to: $PLUGIN_DIR"
+else
+    info "Plugin already compiled (up to date)"
 fi
 
 # --- Configure environment for current session ---
 export _NUGET_UPSTREAM_PROXY="$UPSTREAM_PROXY"
-export NUGET_PLUGIN_PATHS="$PLUGIN_DIR/$PLUGIN_NAME"
 export HTTPS_PROXY="$LOCAL_PROXY"
 export HTTP_PROXY="$LOCAL_PROXY"
 export https_proxy="$LOCAL_PROXY"
 export http_proxy="$LOCAL_PROXY"
 
 info "Saved upstream proxy to _NUGET_UPSTREAM_PROXY"
-info "Set NUGET_PLUGIN_PATHS=$PLUGIN_DIR/$PLUGIN_NAME"
 info "Set HTTPS_PROXY=$LOCAL_PROXY"
 
 # --- Start the proxy daemon ---
 echo ""
-"$PLUGIN_DIR/$PLUGIN_NAME" --start 2>/dev/null
+dotnet "$PLUGIN_DLL" --start 2>/dev/null
 if [ $? -eq 0 ]; then
     info "Proxy daemon started"
 else
@@ -101,7 +117,6 @@ fi
 PROFILE_SNIPPET="
 # NuGet Proxy Credential Provider
 export _NUGET_UPSTREAM_PROXY=\"\${_NUGET_UPSTREAM_PROXY:-\$HTTPS_PROXY}\"
-export NUGET_PLUGIN_PATHS=\"$PLUGIN_DIR/$PLUGIN_NAME\"
 export HTTPS_PROXY=\"$LOCAL_PROXY\"
 export HTTP_PROXY=\"$LOCAL_PROXY\"
 export https_proxy=\"$LOCAL_PROXY\"
@@ -128,4 +143,4 @@ echo ""
 
 # --- Verify ---
 echo "Verification:"
-"$PLUGIN_DIR/$PLUGIN_NAME" --status 2>/dev/null
+dotnet "$PLUGIN_DLL" --status 2>/dev/null

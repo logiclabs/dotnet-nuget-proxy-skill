@@ -30,7 +30,7 @@ To set this up in a project, add to `.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/plugins/dotnet-nuget-proxy-skill/plugins/dotnet-nuget-proxy/hooks/session-start.sh"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/plugins/dotnet-nuget-proxy-skill/hooks/session-start.sh"
           }
         ]
       }
@@ -151,7 +151,7 @@ source <plugin-files-dir>/install-credential-provider.sh
 ```
 
 Where `<plugin-files-dir>` is the directory containing `install-credential-provider.sh`. If the plugin is installed, the file is at:
-`plugins/dotnet-nuget-proxy/skills/nuget-proxy-troubleshooting/files/install-credential-provider.sh`
+`skills/nuget-proxy-troubleshooting/files/install-credential-provider.sh`
 
 This script:
 1. Captures the original upstream proxy URL from `$HTTPS_PROXY`

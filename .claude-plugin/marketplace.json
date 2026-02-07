@@ -7,12 +7,12 @@
   "metadata": {
     "description": "Claude Code plugins for .NET NuGet proxy authentication troubleshooting",
     "version": "1.0.0",
-    "pluginRoot": "./plugins"
+    "pluginRoot": "."
   },
   "plugins": [
     {
       "name": "dotnet-nuget-proxy",
-      "source": "./plugins/dotnet-nuget-proxy",
+      "source": ".",
       "description": "Diagnoses and fixes .NET NuGet proxy authentication issues in containerized and proxy-authenticated environments",
       "version": "1.0.0",
       "author": {

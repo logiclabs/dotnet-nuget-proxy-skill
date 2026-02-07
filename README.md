@@ -62,7 +62,7 @@ git clone https://github.com/logiclabs/dotnet-nuget-proxy-skill .claude/plugins/
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/plugins/dotnet-nuget-proxy-skill/plugins/dotnet-nuget-proxy/hooks/session-start.sh"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/plugins/dotnet-nuget-proxy-skill/hooks/session-start.sh"
           }
         ]
       }
@@ -96,7 +96,7 @@ apt-get install -y --allow-unauthenticated dotnet-sdk-8.0
 ### 2. Set Up the Credential Provider
 
 ```bash
-source plugins/dotnet-nuget-proxy/skills/nuget-proxy-troubleshooting/files/install-credential-provider.sh
+source skills/nuget-proxy-troubleshooting/files/install-credential-provider.sh
 ```
 
 This compiles the C# plugin, installs it, starts the proxy daemon, and configures environment variables. **Must use `source`** so env vars apply to the current shell.
@@ -167,7 +167,7 @@ dotnet $PLUGIN_DLL --stop
 dotnet ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth.dll --status
 
 # Re-run the install script if needed
-source plugins/dotnet-nuget-proxy/skills/nuget-proxy-troubleshooting/files/install-credential-provider.sh
+source skills/nuget-proxy-troubleshooting/files/install-credential-provider.sh
 ```
 
 ### "Connection refused on port 8888"
@@ -187,7 +187,7 @@ You used `dot.net/v1/dotnet-install.sh`. Use `packages.microsoft.com` instead (s
 ls ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth.dll
 
 # Recompile if needed
-source plugins/dotnet-nuget-proxy/skills/nuget-proxy-troubleshooting/files/install-credential-provider.sh
+source skills/nuget-proxy-troubleshooting/files/install-credential-provider.sh
 ```
 
 ### Check proxy logs
@@ -211,7 +211,7 @@ MIT — see [LICENSE](LICENSE).
 
 ## Documentation
 
-- [Skill Documentation](plugins/dotnet-nuget-proxy/skills/nuget-proxy-troubleshooting/SKILL.md)
-- [Proxy README](plugins/dotnet-nuget-proxy/skills/nuget-proxy-troubleshooting/files/NUGET-PROXY-README.md)
-- [Why a Proxy Bridge is Needed](plugins/dotnet-nuget-proxy/skills/nuget-proxy-troubleshooting/files/WHY-PROXY-BRIDGE-NEEDED.md)
+- [Skill Documentation](skills/nuget-proxy-troubleshooting/SKILL.md)
+- [Proxy README](skills/nuget-proxy-troubleshooting/files/NUGET-PROXY-README.md)
+- [Why a Proxy Bridge is Needed](skills/nuget-proxy-troubleshooting/files/WHY-PROXY-BRIDGE-NEEDED.md)
 - [Changelog](CHANGELOG.md)

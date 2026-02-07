@@ -14,8 +14,6 @@ NC='\033[0m' # No Color
 ERRORS=0
 WARNINGS=0
 
-PLUGIN_DIR="plugins/dotnet-nuget-proxy"
-
 # Check 1: Root plugin.json exists and is valid
 echo -n "Checking .claude-plugin/plugin.json... "
 if [ -f ".claude-plugin/plugin.json" ]; then
@@ -44,18 +42,9 @@ else
     ERRORS=$((ERRORS + 1))
 fi
 
-# Check 3: Plugin directory structure
-echo -n "Checking plugin directory ($PLUGIN_DIR)... "
-if [ -d "$PLUGIN_DIR" ] && [ -f "$PLUGIN_DIR/.claude-plugin/plugin.json" ]; then
-    echo -e "${GREEN}OK${NC}"
-else
-    echo -e "${RED}FAIL - Missing plugin directory or plugin.json${NC}"
-    ERRORS=$((ERRORS + 1))
-fi
-
-# Check 4: Skills
+# Check 3: Skills
 echo -n "Checking skills... "
-SKILL_COUNT=$(find "$PLUGIN_DIR/skills" -name "SKILL.md" 2>/dev/null | wc -l)
+SKILL_COUNT=$(find "skills" -name "SKILL.md" 2>/dev/null | wc -l)
 if [ "$SKILL_COUNT" -gt 0 ]; then
     echo -e "${GREEN}OK - Found $SKILL_COUNT skill(s)${NC}"
 else
@@ -63,9 +52,9 @@ else
     ERRORS=$((ERRORS + 1))
 fi
 
-# Check 5: Hooks
+# Check 4: Hooks
 echo -n "Checking hooks... "
-HOOK_COUNT=$(find "$PLUGIN_DIR/hooks" -name "*.sh" 2>/dev/null | wc -l)
+HOOK_COUNT=$(find "hooks" -name "*.sh" 2>/dev/null | wc -l)
 if [ "$HOOK_COUNT" -gt 0 ]; then
     echo -e "${GREEN}OK - Found $HOOK_COUNT hook(s)${NC}"
 else
@@ -73,26 +62,26 @@ else
     WARNINGS=$((WARNINGS + 1))
 fi
 
-# Check 6: C# credential provider source
+# Check 5: C# credential provider source
 echo -n "Checking credential provider source... "
-if [ -f "$PLUGIN_DIR/skills/nuget-proxy-troubleshooting/files/nuget-plugin-proxy-auth-src/Program.cs" ] && \
-   [ -f "$PLUGIN_DIR/skills/nuget-proxy-troubleshooting/files/nuget-plugin-proxy-auth-src/nuget-plugin-proxy-auth.csproj" ]; then
+if [ -f "skills/nuget-proxy-troubleshooting/files/nuget-plugin-proxy-auth-src/Program.cs" ] && \
+   [ -f "skills/nuget-proxy-troubleshooting/files/nuget-plugin-proxy-auth-src/nuget-plugin-proxy-auth.csproj" ]; then
     echo -e "${GREEN}OK${NC}"
 else
     echo -e "${RED}FAIL - Missing C# source files${NC}"
     ERRORS=$((ERRORS + 1))
 fi
 
-# Check 7: Install script
+# Check 6: Install script
 echo -n "Checking install script... "
-if [ -f "$PLUGIN_DIR/skills/nuget-proxy-troubleshooting/files/install-credential-provider.sh" ]; then
+if [ -f "skills/nuget-proxy-troubleshooting/files/install-credential-provider.sh" ]; then
     echo -e "${GREEN}OK${NC}"
 else
     echo -e "${RED}FAIL - Missing install-credential-provider.sh${NC}"
     ERRORS=$((ERRORS + 1))
 fi
 
-# Check 8: Documentation
+# Check 7: Documentation
 echo -n "Checking README.md... "
 if [ -f "README.md" ]; then
     echo -e "${GREEN}OK${NC}"
@@ -117,7 +106,7 @@ else
     ERRORS=$((ERRORS + 1))
 fi
 
-# Check 9: Git
+# Check 8: Git
 echo -n "Checking git repository... "
 if [ -d ".git" ]; then
     echo -e "${GREEN}OK${NC}"
@@ -126,27 +115,13 @@ else
     ERRORS=$((ERRORS + 1))
 fi
 
-# Check 10: Placeholders
-echo -n "Checking for placeholder URLs... "
-if grep -r "YOUR-USERNAME" . --exclude-dir=.git -q 2>/dev/null; then
-    echo -e "${YELLOW}WARN - Found placeholders (update before publishing)${NC}"
+# Check 9: No stale nested plugins directory
+echo -n "Checking for stale plugins/ directory... "
+if [ -d "plugins" ]; then
+    echo -e "${YELLOW}WARN - 'plugins/' exists (structure should be flat at root)${NC}"
     WARNINGS=$((WARNINGS + 1))
 else
-    echo -e "${GREEN}OK - No placeholders${NC}"
-fi
-
-# Check 11: No stale root-level duplicates
-echo -n "Checking for stale root directories... "
-STALE=0
-for dir in skills commands; do
-    if [ -d "$dir" ]; then
-        echo -e "${YELLOW}WARN - Root '$dir/' still exists (should only be in $PLUGIN_DIR/)${NC}"
-        STALE=1
-        WARNINGS=$((WARNINGS + 1))
-    fi
-done
-if [ $STALE -eq 0 ]; then
-    echo -e "${GREEN}OK - No stale duplicates${NC}"
+    echo -e "${GREEN}OK - No stale nesting${NC}"
 fi
 
 # Summary

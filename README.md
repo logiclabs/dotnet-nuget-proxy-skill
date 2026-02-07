@@ -62,7 +62,7 @@ git clone https://github.com/logiclabs/dotnet-nuget-proxy-skill .claude/plugins/
         "hooks": [
           {
             "type": "command",
-            "command": "bash $CLAUDE_PROJECT_DIR/.claude/plugins/dotnet-nuget-proxy-skill/hooks/session-start.sh"
+            "command": "if [ \"${CLAUDE_CODE_REMOTE:-}\" = \"true\" ]; then bash $CLAUDE_PROJECT_DIR/.claude/plugins/dotnet-nuget-proxy-skill/hooks/session-start.sh; fi"
           }
         ]
       }

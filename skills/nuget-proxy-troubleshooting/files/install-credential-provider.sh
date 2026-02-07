@@ -76,13 +76,12 @@ PLUGIN_DLL="$PLUGIN_DIR/$PLUGIN_NAME.dll"
 
 if [ ! -f "$PLUGIN_DLL" ] || [ "$PLUGIN_SRC_DIR/Program.cs" -nt "$PLUGIN_DLL" ]; then
     echo "Compiling credential provider..."
-    # Build using the upstream proxy (not localhost) so NuGet can fetch SDK deps
-    _NUGET_UPSTREAM_PROXY="$UPSTREAM_PROXY" \
-    HTTPS_PROXY="$UPSTREAM_PROXY" HTTP_PROXY="$UPSTREAM_PROXY" \
-    https_proxy="$UPSTREAM_PROXY" http_proxy="$UPSTREAM_PROXY" \
+    # Use --no-restore: the project has zero NuGet dependencies, so restore
+    # is unnecessary and would fail before the proxy is running.
     dotnet publish "$PLUGIN_SRC_DIR" \
         -c Release \
         -o "$PLUGIN_DIR" \
+        --no-restore \
         --nologo \
         -v quiet 2>&1
     if [ $? -ne 0 ]; then

@@ -1,0 +1,374 @@
+#!/usr/bin/env python3
+"""
+NuGet Cross-Platform Credential Provider Plugin for Proxy Authentication.
+
+Solves the problem where NuGet doesn't pass the PROXY_AUTHORIZATION environment
+variable to the downstream proxy. This plugin implements the NuGet cross-platform
+plugin protocol (v2) and supplies JWT proxy credentials from the environment
+directly to NuGet's authentication pipeline.
+
+Protocol reference:
+  https://learn.microsoft.com/en-us/nuget/reference/extensibility/nuget-cross-platform-plugins
+  https://learn.microsoft.com/en-us/nuget/reference/extensibility/nuget-cross-platform-authentication-plugin
+
+Discovery:
+  - Via PATH: executable named nuget-plugin-* (NuGet 6.13+)
+  - Via NUGET_PLUGIN_PATHS environment variable
+  - Via ~/.nuget/plugins/netcore/<name>/ directory
+
+Usage:
+  NuGet invokes this plugin automatically with: nuget-plugin-proxy-auth -Plugin
+"""
+
+import base64
+import json
+import os
+import sys
+import urllib.parse
+import uuid
+
+
+PLUGIN_NAME = "NuGetProxyCredentialProvider"
+PROTOCOL_VERSION = "2.0.0"
+MIN_PROTOCOL_VERSION = "2.0.0"
+
+# Operation claim types (numeric per NuGet protocol spec)
+OPERATION_DOWNLOAD = 0
+OPERATION_AUTHENTICATION = 2
+
+# Response codes
+RESPONSE_SUCCESS = "Success"
+RESPONSE_NOT_FOUND = "NotFound"
+RESPONSE_ERROR = "Error"
+
+
+def log_stderr(message):
+    """Write diagnostic messages to stderr (never secrets)."""
+    print(f"[{PLUGIN_NAME}] {message}", file=sys.stderr, flush=True)
+
+
+def get_proxy_credentials():
+    """
+    Extract proxy credentials from the environment.
+
+    Checks (in order):
+    1. PROXY_AUTHORIZATION env var (raw token value)
+    2. Credentials embedded in HTTPS_PROXY / HTTP_PROXY URL
+    3. http_proxy / https_proxy (lowercase variants)
+
+    Returns:
+        tuple: (username, password) or (None, None) if not found
+    """
+    # Method 1: Direct PROXY_AUTHORIZATION environment variable
+    proxy_auth = os.environ.get("PROXY_AUTHORIZATION", "").strip()
+    if proxy_auth:
+        # The PROXY_AUTHORIZATION value may be:
+        # - A raw token (use as password with placeholder username)
+        # - A "Basic <base64>" string (decode to user:pass)
+        # - A "Bearer <token>" string (use token as password)
+        if proxy_auth.startswith("Basic "):
+            try:
+                decoded = base64.b64decode(proxy_auth[6:]).decode("utf-8")
+                if ":" in decoded:
+                    user, passwd = decoded.split(":", 1)
+                    log_stderr("Credentials extracted from PROXY_AUTHORIZATION (Basic)")
+                    return user, passwd
+            except Exception:
+                pass
+            # If decode fails, treat the whole thing as a token
+            log_stderr("Credentials extracted from PROXY_AUTHORIZATION (Basic raw)")
+            return "proxy-auth", proxy_auth
+
+        if proxy_auth.startswith("Bearer "):
+            log_stderr("Credentials extracted from PROXY_AUTHORIZATION (Bearer)")
+            return "proxy-auth", proxy_auth
+
+        # Raw token value
+        log_stderr("Credentials extracted from PROXY_AUTHORIZATION (raw)")
+        return "proxy-auth", proxy_auth
+
+    # Method 2: Credentials embedded in proxy URL
+    for env_var in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
+        proxy_url = os.environ.get(env_var, "").strip()
+        if not proxy_url:
+            continue
+
+        try:
+            parsed = urllib.parse.urlparse(proxy_url)
+            if parsed.username:
+                username = urllib.parse.unquote(parsed.username)
+                password = urllib.parse.unquote(parsed.password or "")
+                log_stderr(f"Credentials extracted from {env_var} URL")
+                return username, password
+        except Exception:
+            continue
+
+    log_stderr("No proxy credentials found in environment")
+    return None, None
+
+
+def get_proxy_uri():
+    """Get the proxy URI from environment (without credentials)."""
+    for env_var in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
+        proxy_url = os.environ.get(env_var, "").strip()
+        if proxy_url:
+            try:
+                parsed = urllib.parse.urlparse(proxy_url)
+                # Return just the host:port portion
+                return f"{parsed.scheme}://{parsed.hostname}:{parsed.port or 8080}"
+            except Exception:
+                return proxy_url
+    return None
+
+
+def make_response(request_id, method, payload):
+    """Construct a protocol response message."""
+    return {
+        "RequestId": request_id,
+        "Type": "Response",
+        "Method": method,
+        "Payload": payload,
+    }
+
+
+def handle_handshake(request_id, payload):
+    """
+    Negotiate protocol version with NuGet client.
+
+    The client sends its supported protocol version range.
+    We respond with the version we'll use.
+    """
+    client_version = payload.get("ProtocolVersion", "1.0.0")
+    client_min_version = payload.get("MinimumProtocolVersion", "1.0.0")
+
+    log_stderr(f"Handshake: client version={client_version}, min={client_min_version}")
+
+    return make_response(request_id, "Handshake", {
+        "ResponseCode": RESPONSE_SUCCESS,
+        "ProtocolVersion": PROTOCOL_VERSION,
+    })
+
+
+def handle_initialize(request_id, payload):
+    """
+    Handle initialization from NuGet client.
+
+    Receives client version, language, and default request timeout.
+    """
+    client_version = payload.get("ClientVersion", "unknown")
+    log_stderr(f"Initialize: NuGet client version={client_version}")
+
+    return make_response(request_id, "Initialize", {
+        "ResponseCode": RESPONSE_SUCCESS,
+    })
+
+
+def handle_get_operation_claims(request_id, payload):
+    """
+    Declare which operations this plugin supports.
+
+    We claim Authentication (operation type 2) so NuGet will ask us
+    for credentials when it encounters auth challenges.
+    """
+    service_index = payload.get("ServiceIndex", "")
+    package_source = payload.get("PackageSourceRepository", "")
+
+    log_stderr(f"GetOperationClaims: source={package_source or service_index}")
+
+    # Always claim authentication capability
+    return make_response(request_id, "GetOperationClaims", {
+        "ResponseCode": RESPONSE_SUCCESS,
+        "Claims": [OPERATION_AUTHENTICATION],
+    })
+
+
+def handle_get_authentication_credentials(request_id, payload):
+    """
+    Provide authentication credentials for proxy access.
+
+    NuGet calls this when it encounters a 401/407 auth challenge.
+    We extract the JWT/credentials from the PROXY_AUTHORIZATION
+    environment variable and return them.
+    """
+    uri = payload.get("Uri", "")
+    is_retry = payload.get("IsRetry", False)
+    non_interactive = payload.get("NonInteractive", True)
+    can_show_dialog = payload.get("CanShowDialog", False)
+
+    log_stderr(f"GetAuthenticationCredentials: uri={uri}, isRetry={is_retry}")
+
+    username, password = get_proxy_credentials()
+
+    if username and password:
+        log_stderr(f"Providing credentials for: {uri}")
+        return make_response(request_id, "GetAuthenticationCredentials", {
+            "ResponseCode": RESPONSE_SUCCESS,
+            "Username": username,
+            "Password": password,
+            "AuthTypes": ["Basic"],
+            "Message": "",
+        })
+
+    log_stderr(f"No credentials available for: {uri}")
+    return make_response(request_id, "GetAuthenticationCredentials", {
+        "ResponseCode": RESPONSE_NOT_FOUND,
+        "Username": "",
+        "Password": "",
+        "AuthTypes": [],
+        "Message": "No proxy credentials found in PROXY_AUTHORIZATION or proxy URL environment variables",
+    })
+
+
+def handle_set_credentials(request_id, payload):
+    """
+    Receive known credentials from NuGet.
+
+    NuGet may send previously known proxy/source credentials.
+    We acknowledge but don't need to store them since we read from environment.
+    """
+    proxy_username = payload.get("ProxyUsername", "")
+    log_stderr(f"SetCredentials: proxyUser={'(set)' if proxy_username else '(none)'}")
+
+    return make_response(request_id, "SetCredentials", {
+        "ResponseCode": RESPONSE_SUCCESS,
+    })
+
+
+def handle_get_service_index(request_id, payload):
+    """Handle service index requests (not applicable for auth-only plugin)."""
+    return make_response(request_id, "GetServiceIndex", {
+        "ResponseCode": RESPONSE_NOT_FOUND,
+    })
+
+
+def handle_log(request_id, payload):
+    """Handle log messages from NuGet."""
+    return make_response(request_id, "Log", {
+        "ResponseCode": RESPONSE_SUCCESS,
+    })
+
+
+# Method dispatch table
+HANDLERS = {
+    "Handshake": handle_handshake,
+    "Initialize": handle_initialize,
+    "GetOperationClaims": handle_get_operation_claims,
+    "GetAuthenticationCredentials": handle_get_authentication_credentials,
+    "SetCredentials": handle_set_credentials,
+    "GetServiceIndex": handle_get_service_index,
+    "Log": handle_log,
+}
+
+
+def process_message(line):
+    """Parse and dispatch a single protocol message."""
+    try:
+        message = json.loads(line)
+    except json.JSONDecodeError as e:
+        log_stderr(f"Failed to parse message: {e}")
+        return None
+
+    msg_type = message.get("Type", "")
+    method = message.get("Method", "")
+    request_id = message.get("RequestId", str(uuid.uuid4()))
+    payload = message.get("Payload", {})
+
+    # Only handle Request messages
+    if msg_type != "Request":
+        log_stderr(f"Ignoring non-request message: Type={msg_type}, Method={method}")
+        return None
+
+    handler = HANDLERS.get(method)
+    if handler:
+        return handler(request_id, payload)
+
+    log_stderr(f"Unknown method: {method}")
+    return make_response(request_id, method, {
+        "ResponseCode": RESPONSE_NOT_FOUND,
+    })
+
+
+def run_plugin():
+    """
+    Main plugin loop.
+
+    Reads JSON messages from stdin (one per line), processes them,
+    and writes JSON responses to stdout (one per line).
+    """
+    log_stderr("Plugin started")
+    log_stderr(f"Protocol version: {PROTOCOL_VERSION}")
+
+    proxy_uri = get_proxy_uri()
+    if proxy_uri:
+        log_stderr(f"Proxy detected: {proxy_uri}")
+
+    username, _ = get_proxy_credentials()
+    log_stderr(f"Credentials available: {'yes' if username else 'no'}")
+
+    try:
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+
+            response = process_message(line)
+            if response:
+                response_json = json.dumps(response)
+                sys.stdout.write(response_json + "\n")
+                sys.stdout.flush()
+    except KeyboardInterrupt:
+        log_stderr("Plugin interrupted")
+    except BrokenPipeError:
+        log_stderr("Plugin pipe closed")
+    except Exception as e:
+        log_stderr(f"Plugin error: {e}")
+    finally:
+        log_stderr("Plugin exiting")
+
+
+def print_info():
+    """Print plugin information when run without -Plugin flag."""
+    print(f"{PLUGIN_NAME} - NuGet Cross-Platform Credential Provider")
+    print()
+    print("Purpose:")
+    print("  Provides proxy authentication credentials to NuGet from environment")
+    print("  variables. Solves the issue where NuGet doesn't pass PROXY_AUTHORIZATION")
+    print("  to the downstream proxy.")
+    print()
+    print("Environment Variables (checked in order):")
+    print("  PROXY_AUTHORIZATION  - JWT or Basic auth token for proxy")
+    print("  HTTPS_PROXY          - Proxy URL (credentials may be embedded)")
+    print("  HTTP_PROXY           - Proxy URL (credentials may be embedded)")
+    print()
+    print("Installation:")
+    print("  1. Place on PATH as 'nuget-plugin-proxy-auth' (NuGet 6.13+)")
+    print("  2. Or set NUGET_PLUGIN_PATHS to this file's directory")
+    print("  3. Or copy to ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/")
+    print()
+    print("Current Environment:")
+
+    proxy_uri = get_proxy_uri()
+    print(f"  Proxy:       {proxy_uri or '(not set)'}")
+
+    username, _ = get_proxy_credentials()
+    print(f"  Credentials: {'available' if username else 'not found'}")
+
+    proxy_auth = os.environ.get("PROXY_AUTHORIZATION", "")
+    if proxy_auth:
+        # Show type without revealing the token
+        if proxy_auth.startswith("Basic "):
+            print("  Auth type:   Basic")
+        elif proxy_auth.startswith("Bearer "):
+            print("  Auth type:   Bearer")
+        else:
+            print("  Auth type:   Raw token")
+    print()
+    print("Protocol: NuGet Cross-Platform Plugin v2.0.0")
+    print("Invocation: nuget-plugin-proxy-auth -Plugin")
+
+
+if __name__ == "__main__":
+    if "-Plugin" in sys.argv:
+        run_plugin()
+    else:
+        print_info()

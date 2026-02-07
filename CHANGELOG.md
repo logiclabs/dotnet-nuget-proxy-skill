@@ -113,13 +113,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Updated hook (`pre-dotnet-restore.sh`) to detect C# credential provider
-- Updated all slash commands to lead with C# approach
-- Updated README.md and NUGET-PROXY-README.md for C# credential provider
-- Removed Python proxy files (`nuget-proxy.py`, `dotnet-with-proxy.sh`, `setup-dotnet-alias.sh`, `NuGet.config`)
+- Rewrote SKILL.md with comprehensive Claude Code web environment guide:
+  - Decision flow for .NET SDK installation and proxy setup
+  - .NET SDK installation from `packages.microsoft.com` (not blocked `dot.net`)
+  - "What NOT to Do" section to prevent common mistakes
+  - Architecture details for the credential provider
+- Rewrote README.md with practical quick start for new sessions
+- Updated NUGET-PROXY-README.md for C# credential provider
+- Updated verify-plugin.sh for new directory structure
+
+### Removed
+- Python proxy files (`nuget-proxy.py`, `dotnet-with-proxy.sh`, `setup-dotnet-alias.sh`, `NuGet.config`)
+- Duplicate root-level `skills/`, `commands/`, `hooks/` directories (canonical source is `plugins/dotnet-nuget-proxy/`)
+- Slash commands (`nuget-proxy-debug.md`, `nuget-proxy-fix.md`, `nuget-proxy-verify.md`) — the skill provides sufficient guidance
 
 ### Planned Features
 - Support for custom proxy ports
-- Linux systemd service file for proxy daemon
 - Support for private NuGet feeds
 - Multi-proxy support for complex networks
 

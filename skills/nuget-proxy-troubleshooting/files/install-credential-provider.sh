@@ -76,8 +76,20 @@ PLUGIN_DLL="$PLUGIN_DIR/$PLUGIN_NAME.dll"
 
 if [ ! -f "$PLUGIN_DLL" ] || [ "$PLUGIN_SRC_DIR/Program.cs" -nt "$PLUGIN_DLL" ]; then
     echo "Compiling credential provider..."
-    # Use --no-restore: the project has zero NuGet dependencies, so restore
-    # is unnecessary and would fail before the proxy is running.
+    # The project has zero NuGet package dependencies, but dotnet still needs
+    # to resolve framework references (Microsoft.NETCore.App.Ref). We restore
+    # from the local SDK packs directory only — no network access needed.
+    # This avoids the chicken-and-egg problem: the proxy isn't running yet.
+    DOTNET_PACKS="$(dotnet --info 2>/dev/null | grep -m1 'Base Path' | sed 's/.*: *//' | sed 's|/sdk/.*|/packs/|')"
+    if [ -z "$DOTNET_PACKS" ] || [ ! -d "$DOTNET_PACKS" ]; then
+        # Fallback: common locations for SDK packs
+        for p in /usr/lib/dotnet/packs /usr/share/dotnet/packs; do
+            if [ -d "$p" ]; then DOTNET_PACKS="$p"; break; fi
+        done
+    fi
+    if [ -n "$DOTNET_PACKS" ] && [ -d "$DOTNET_PACKS" ]; then
+        dotnet restore "$PLUGIN_SRC_DIR" --source "$DOTNET_PACKS" --verbosity quiet 2>/dev/null
+    fi
     dotnet publish "$PLUGIN_SRC_DIR" \
         -c Release \
         -o "$PLUGIN_DIR" \

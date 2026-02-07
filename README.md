@@ -59,10 +59,11 @@ git clone https://github.com/logiclabs/dotnet-nuget-proxy-skill .claude/plugins/
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "startup",
         "hooks": [
           {
             "type": "command",
-            "command": "if [ \"${CLAUDE_CODE_REMOTE:-}\" = \"true\" ]; then bash $CLAUDE_PROJECT_DIR/.claude/plugins/dotnet-nuget-proxy-skill/hooks/session-start.sh; fi"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/plugins/dotnet-nuget-proxy-skill/hooks/session-start.sh"
           }
         ]
       }
@@ -71,9 +72,15 @@ git clone https://github.com/logiclabs/dotnet-nuget-proxy-skill .claude/plugins/
 }
 ```
 
-**3. Commit both to your repo.** All future Claude Code web sessions will have .NET ready automatically.
+**3. Make the hook executable and commit both to your repo:**
 
-The hook only runs in web sessions (skips on desktop). It installs the .NET SDK, compiles the credential provider, starts the proxy, and persists env vars for the session.
+```bash
+chmod +x .claude/plugins/dotnet-nuget-proxy-skill/hooks/session-start.sh
+```
+
+All future Claude Code web sessions will have .NET ready automatically.
+
+The hook only runs in web sessions (checks `CLAUDE_CODE_REMOTE` internally and exits on desktop). It installs the .NET SDK, compiles the credential provider, starts the proxy, and persists env vars for the session.
 
 ---
 
@@ -99,7 +106,7 @@ apt-get install -y --allow-unauthenticated dotnet-sdk-8.0
 source skills/nuget-proxy-troubleshooting/files/install-credential-provider.sh
 ```
 
-This compiles the C# plugin, installs it, starts the proxy daemon, and configures environment variables. **Must use `source`** so env vars apply to the current shell.
+This compiles the C# plugin, installs it, starts the proxy daemon, and creates a `dotnet()` shell function that routes only dotnet traffic through the local proxy. **Must use `source`** so the shell function applies to the current shell. Global `HTTPS_PROXY` is NOT modified.
 
 ### 3. Use .NET Normally
 
@@ -132,15 +139,16 @@ Claude will use the plugin's skill to guide you through the correct steps.
 2. **install-credential-provider.sh** — Install script that:
    - Compiles the C# plugin (if needed)
    - Captures original upstream proxy URL as `_NUGET_UPSTREAM_PROXY`
-   - Points `HTTPS_PROXY` to `http://127.0.0.1:8888`
+   - Creates a `dotnet()` shell function routing dotnet traffic through `localhost:8888`
    - Starts the proxy daemon
+   - Global `HTTPS_PROXY` stays unchanged (other tools unaffected)
 
 ### Environment Variables
 
 | Variable | Purpose |
 |----------|---------|
 | `_NUGET_UPSTREAM_PROXY` | Original upstream proxy URL (set by install script) |
-| `HTTPS_PROXY` | Points to `localhost:8888` after install |
+| `dotnet()` | Shell function that sets `HTTPS_PROXY=localhost:8888` only for dotnet |
 | `PROXY_AUTHORIZATION` | JWT or Basic auth token (set by Claude Code) |
 
 ## Proxy Management

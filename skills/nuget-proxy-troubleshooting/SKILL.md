@@ -27,10 +27,11 @@ To set this up in a project, add to `.claude/settings.json`:
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "startup",
         "hooks": [
           {
             "type": "command",
-            "command": "if [ \"${CLAUDE_CODE_REMOTE:-}\" = \"true\" ]; then bash $CLAUDE_PROJECT_DIR/.claude/plugins/dotnet-nuget-proxy-skill/hooks/session-start.sh; fi"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/plugins/dotnet-nuget-proxy-skill/hooks/session-start.sh"
           }
         ]
       }
@@ -39,14 +40,14 @@ To set this up in a project, add to `.claude/settings.json`:
 }
 ```
 
-The path above assumes the plugin was cloned to `.claude/plugins/dotnet-nuget-proxy-skill/`. Adjust if installed elsewhere.
+The path above assumes the plugin was cloned to `.claude/plugins/dotnet-nuget-proxy-skill/`. Adjust if installed elsewhere. Ensure the hook script is executable (`chmod +x`).
 
-The hook:
-- Only runs in Claude Code web sessions (skips on desktop)
+The hook checks `CLAUDE_CODE_REMOTE` internally and:
+- Only runs in Claude Code web sessions (exits immediately on desktop)
 - Installs .NET SDK from `packages.microsoft.com` if not present
 - Compiles and installs the credential provider
 - Starts the proxy daemon
-- Persists env vars via `$CLAUDE_ENV_FILE`
+- Persists the `dotnet()` shell function and `_NUGET_UPSTREAM_PROXY` via `$CLAUDE_ENV_FILE`
 
 ---
 
@@ -175,11 +176,12 @@ This script:
 1. Captures the original upstream proxy URL from `$HTTPS_PROXY`
 2. Compiles the C# plugin via `dotnet publish` (offline — uses local SDK packs, no network needed)
 3. Installs to `~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/` for auto-discovery
-4. Sets `HTTPS_PROXY` to `http://127.0.0.1:8888` (the local proxy)
+4. Creates a `dotnet()` shell function that routes only dotnet traffic through `localhost:8888`
 5. Starts the proxy daemon
-6. No NuGet.Config changes needed
+6. Global `HTTPS_PROXY` is NOT modified — other tools (curl, apt, pip) are unaffected
+7. No NuGet.Config changes needed
 
-**IMPORTANT**: Use `source` (not `bash` or `./`) so the environment variables apply to the current shell.
+**IMPORTANT**: Use `source` (not `bash` or `./`) so the shell function applies to the current shell.
 
 After setup, just use `dotnet restore` / `dotnet build` / `dotnet run` normally.
 
@@ -205,8 +207,9 @@ After installation, these are set:
 | Variable | Value | Purpose |
 |----------|-------|---------|
 | `_NUGET_UPSTREAM_PROXY` | Original proxy URL | Preserved upstream proxy with credentials |
-| `HTTPS_PROXY` | `http://127.0.0.1:8888` | Points NuGet to the local proxy |
-| `HTTP_PROXY` | `http://127.0.0.1:8888` | Points NuGet to the local proxy |
+| `dotnet()` | shell function | Routes dotnet traffic through `localhost:8888` |
+
+Global `HTTPS_PROXY` / `HTTP_PROXY` remain **unchanged** — only `dotnet` commands use the local proxy.
 
 The proxy reads credentials from (in order):
 1. `_NUGET_UPSTREAM_PROXY` - Original upstream proxy URL (set by install script)

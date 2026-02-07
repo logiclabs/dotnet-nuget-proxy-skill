@@ -4,12 +4,17 @@
 # This script:
 #   1. Compiles the C# credential provider plugin (first time only)
 #   2. Installs it to ~/.nuget/plugins/netcore/ for NuGet auto-discovery
-#   3. Saves the original upstream proxy URL
-#   4. Points HTTPS_PROXY to the local proxy (localhost:8888)
+#   3. Saves the original upstream proxy URL to _NUGET_UPSTREAM_PROXY
+#   4. Creates a dotnet() shell function that routes only dotnet traffic
+#      through the local proxy — global HTTPS_PROXY is NOT modified
 #   5. Starts the proxy daemon
 #
 # After installation, `dotnet restore` works without wrapper scripts
-# or NuGet.Config changes.
+# or NuGet.Config changes. Other tools (curl, apt, pip) continue to
+# use the original upstream proxy unaffected.
+#
+# IMPORTANT: Use `source` (not `bash` or `./`) so the shell function
+# and env vars apply to the current shell.
 
 set -e
 
@@ -30,25 +35,25 @@ error() { echo -e "${RED}[ERR]${NC} $1"; }
 # --- Verify prerequisites ---
 if [ ! -d "$PLUGIN_SRC_DIR" ]; then
     error "Plugin source not found at: $PLUGIN_SRC_DIR"
-    exit 1
+    return 1 2>/dev/null || exit 1
 fi
 
 if ! command -v dotnet &> /dev/null; then
     error ".NET SDK is required but not found"
-    exit 1
+    return 1 2>/dev/null || exit 1
 fi
 
 echo "Installing NuGet Proxy Credential Provider"
 echo "==========================================="
 echo ""
 
-# --- Capture the original upstream proxy BEFORE we overwrite HTTPS_PROXY ---
+# --- Capture the original upstream proxy ---
 UPSTREAM_PROXY="${_NUGET_UPSTREAM_PROXY:-${HTTPS_PROXY:-${https_proxy:-${HTTP_PROXY:-${http_proxy:-}}}}}"
 
 if [ -z "$UPSTREAM_PROXY" ]; then
     error "No proxy URL found in environment (HTTPS_PROXY / HTTP_PROXY)"
     error "This plugin requires an authenticated upstream proxy"
-    exit 1
+    return 1 2>/dev/null || exit 1
 fi
 
 # Strip localhost references (don't save our own local proxy as upstream)
@@ -58,7 +63,7 @@ if echo "$UPSTREAM_PROXY" | grep -qE "127\.0\.0\.1|localhost"; then
     else
         error "HTTPS_PROXY points to localhost but no upstream proxy saved"
         error "Set _NUGET_UPSTREAM_PROXY to the authenticated proxy URL"
-        exit 1
+        return 1 2>/dev/null || exit 1
     fi
 fi
 
@@ -114,52 +119,49 @@ else
 fi
 
 # --- Configure environment for current session ---
+# Save the upstream proxy so the C# plugin can find it
 export _NUGET_UPSTREAM_PROXY="$UPSTREAM_PROXY"
-export HTTPS_PROXY="$LOCAL_PROXY"
-export HTTP_PROXY="$LOCAL_PROXY"
-export https_proxy="$LOCAL_PROXY"
-export http_proxy="$LOCAL_PROXY"
 
 info "Saved upstream proxy to _NUGET_UPSTREAM_PROXY"
-info "Set HTTPS_PROXY=$LOCAL_PROXY"
+
+# Create a shell function that sets proxy vars ONLY for dotnet commands.
+# This avoids overwriting the global HTTPS_PROXY that other tools rely on.
+dotnet() {
+    HTTPS_PROXY="$LOCAL_PROXY" \
+    HTTP_PROXY="$LOCAL_PROXY" \
+    https_proxy="$LOCAL_PROXY" \
+    http_proxy="$LOCAL_PROXY" \
+    _NUGET_UPSTREAM_PROXY="${_NUGET_UPSTREAM_PROXY}" \
+    command dotnet "$@"
+}
+export -f dotnet
+
+info "Created dotnet() shell function (proxy scoped to dotnet only)"
 
 # --- Start the proxy daemon ---
 echo ""
-dotnet "$PLUGIN_DLL" --start 2>/dev/null
+# Use 'command dotnet' to bypass our shell function (daemon needs the real upstream proxy)
+_NUGET_UPSTREAM_PROXY="$UPSTREAM_PROXY" command dotnet "$PLUGIN_DLL" --start 2>/dev/null
 if [ $? -eq 0 ]; then
     info "Proxy daemon started"
 else
     warn "Proxy may already be running or failed to start"
 fi
 
-# --- Write shell profile snippet ---
-PROFILE_SNIPPET="
-# NuGet Proxy Credential Provider
-export _NUGET_UPSTREAM_PROXY=\"\${_NUGET_UPSTREAM_PROXY:-\$HTTPS_PROXY}\"
-export HTTPS_PROXY=\"$LOCAL_PROXY\"
-export HTTP_PROXY=\"$LOCAL_PROXY\"
-export https_proxy=\"$LOCAL_PROXY\"
-export http_proxy=\"$LOCAL_PROXY\"
-"
-
 echo ""
 echo "==========================================="
 echo ""
 info "Installation complete!"
 echo ""
-echo "  For this session, the environment is already configured."
+echo "  The dotnet() shell function routes NuGet traffic through the"
+echo "  local proxy. Other tools (curl, apt, pip) are unaffected."
+echo ""
 echo "  Just run: dotnet restore"
 echo ""
-echo "  To persist across sessions, add to your shell profile:"
-echo ""
-echo "    cat >> ~/.bashrc << 'NUGETEOF'"
-echo "$PROFILE_SNIPPET"
-echo "NUGETEOF"
-echo ""
-echo "  Or source this script at the start of each session:"
+echo "  To persist across sessions, source this script at startup:"
 echo "    source $SCRIPT_DIR/install-credential-provider.sh"
 echo ""
 
 # --- Verify ---
 echo "Verification:"
-dotnet "$PLUGIN_DLL" --status 2>/dev/null
+_NUGET_UPSTREAM_PROXY="$UPSTREAM_PROXY" command dotnet "$PLUGIN_DLL" --status 2>/dev/null

@@ -76,14 +76,26 @@ else
   exit 0
 fi
 
-# --- Step 4: Persist env vars for the session ---
+# --- Step 4: Persist the upstream proxy and dotnet function for the session ---
+# Only _NUGET_UPSTREAM_PROXY needs persisting — global HTTPS_PROXY stays unchanged.
+# The dotnet() shell function (created by install-credential-provider.sh) scopes
+# the local proxy to dotnet commands only, so other tools are unaffected.
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   echo "export _NUGET_UPSTREAM_PROXY=\"${_NUGET_UPSTREAM_PROXY:-}\"" >> "$CLAUDE_ENV_FILE"
-  echo "export HTTPS_PROXY=\"${HTTPS_PROXY:-}\"" >> "$CLAUDE_ENV_FILE"
-  echo "export HTTP_PROXY=\"${HTTP_PROXY:-}\"" >> "$CLAUDE_ENV_FILE"
-  echo "export https_proxy=\"${https_proxy:-}\"" >> "$CLAUDE_ENV_FILE"
-  echo "export http_proxy=\"${http_proxy:-}\"" >> "$CLAUDE_ENV_FILE"
-  echo "Environment variables persisted for session."
+  # Re-export the dotnet shell function so it survives across subshells
+  LOCAL_PROXY="http://127.0.0.1:8888"
+  cat >> "$CLAUDE_ENV_FILE" << 'DOTNET_FUNC'
+dotnet() {
+    HTTPS_PROXY="http://127.0.0.1:8888" \
+    HTTP_PROXY="http://127.0.0.1:8888" \
+    https_proxy="http://127.0.0.1:8888" \
+    http_proxy="http://127.0.0.1:8888" \
+    _NUGET_UPSTREAM_PROXY="${_NUGET_UPSTREAM_PROXY}" \
+    command dotnet "$@"
+}
+export -f dotnet
+DOTNET_FUNC
+  echo "Environment persisted for session."
 fi
 
 echo ".NET NuGet proxy setup complete."

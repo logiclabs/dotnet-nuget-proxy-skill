@@ -161,9 +161,9 @@ class Program
             else
                 HandleHttpRequest(clientStream, requestBytes, upstreamHost, upstreamPort, upstreamAuth);
         }
-        catch
+        catch (Exception ex)
         {
-            // Silently handle client errors
+            Log($"Client error: {ex.Message}");
         }
         finally
         {
@@ -176,9 +176,9 @@ class Program
     {
         Log($"CONNECT {target}");
 
-        var upstream = new TcpClient();
+        using var upstream = new TcpClient();
         upstream.Connect(upstreamHost, upstreamPort);
-        var upstreamStream = upstream.GetStream();
+        using var upstreamStream = upstream.GetStream();
 
         // Send CONNECT to upstream proxy with auth
         var connectReq = new StringBuilder();
@@ -190,23 +190,25 @@ class Program
 
         var connectBytes = Encoding.ASCII.GetBytes(connectReq.ToString());
         upstreamStream.Write(connectBytes, 0, connectBytes.Length);
+        upstreamStream.Flush();
 
         // Read upstream response
         var responseBytes = ReadHttpHeaders(upstreamStream);
-        if (responseBytes == null)
-        {
-            upstream.Close();
-            return;
-        }
+        if (responseBytes == null) return;
 
         var responseText = Encoding.ASCII.GetString(responseBytes);
-        var statusLine = responseText.Split('\n')[0];
+        var statusLine = responseText.Split('\n')[0].Trim('\r');
 
-        if (statusLine.Contains("200"))
+        // Parse status code: "HTTP/1.1 200 ..."
+        var statusParts = statusLine.Split(' ');
+        var statusCode = statusParts.Length >= 2 ? statusParts[1] : "";
+
+        if (statusCode == "200")
         {
             // Tell client the tunnel is established
             var ok = Encoding.ASCII.GetBytes("HTTP/1.1 200 Connection Established\r\nProxy-Agent: NuGet-Proxy\r\n\r\n");
             clientStream.Write(ok, 0, ok.Length);
+            clientStream.Flush();
 
             // Relay data bidirectionally
             Relay(clientStream, upstreamStream);
@@ -214,11 +216,11 @@ class Program
         else
         {
             // Forward the error to client
-            var errBytes = Encoding.ASCII.GetBytes($"HTTP/1.1 502 Bad Gateway\r\n\r\nUpstream proxy refused CONNECT: {statusLine}\r\n");
+            var errMsg = $"HTTP/1.1 502 Bad Gateway\r\n\r\nUpstream proxy refused CONNECT: {statusLine}\r\n";
+            var errBytes = Encoding.ASCII.GetBytes(errMsg);
             clientStream.Write(errBytes, 0, errBytes.Length);
+            clientStream.Flush();
         }
-
-        upstream.Close();
     }
 
     static void HandleHttpRequest(NetworkStream clientStream, byte[] requestBytes,
@@ -228,27 +230,32 @@ class Program
         var firstLine = requestText.Split('\n')[0].Trim('\r');
         Log(firstLine);
 
-        // Inject Proxy-Authorization header if not present
-        if (upstreamAuth != null && !requestText.Contains("Proxy-Authorization:"))
+        // Inject Proxy-Authorization header if not present (search headers only, not body)
+        if (upstreamAuth != null)
         {
             var headerEnd = requestText.IndexOf("\r\n\r\n", StringComparison.Ordinal);
             if (headerEnd >= 0)
             {
-                var modified = requestText.Substring(0, headerEnd) +
-                               $"\r\nProxy-Authorization: {upstreamAuth}" +
-                               requestText.Substring(headerEnd);
-                requestBytes = Encoding.ASCII.GetBytes(modified);
+                var headersOnly = requestText.Substring(0, headerEnd);
+                if (headersOnly.IndexOf("Proxy-Authorization:", StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    var modified = headersOnly +
+                                   $"\r\nProxy-Authorization: {upstreamAuth}" +
+                                   requestText.Substring(headerEnd);
+                    requestBytes = Encoding.ASCII.GetBytes(modified);
+                }
             }
         }
 
         // Forward to upstream proxy
         try
         {
-            var upstream = new TcpClient();
+            using var upstream = new TcpClient();
             upstream.Connect(upstreamHost, upstreamPort);
-            var upstreamStream = upstream.GetStream();
+            using var upstreamStream = upstream.GetStream();
 
             upstreamStream.Write(requestBytes, 0, requestBytes.Length);
+            upstreamStream.Flush();
 
             // Read and forward response
             var buffer = new byte[8192];
@@ -257,13 +264,14 @@ class Program
             {
                 clientStream.Write(buffer, 0, bytesRead);
             }
-
-            upstream.Close();
+            clientStream.Flush();
         }
         catch (Exception ex)
         {
-            var errBytes = Encoding.ASCII.GetBytes($"HTTP/1.1 502 Bad Gateway\r\n\r\nProxy Error: {ex.Message}\r\n");
+            var errMsg = $"HTTP/1.1 502 Bad Gateway\r\n\r\nProxy Error: {ex.Message}\r\n";
+            var errBytes = Encoding.ASCII.GetBytes(errMsg);
             clientStream.Write(errBytes, 0, errBytes.Length);
+            clientStream.Flush();
         }
     }
 
@@ -404,8 +412,6 @@ class Program
             arguments = "--_run-proxy";
         }
 
-        var logStream = File.Open(LogFile, FileMode.Append, FileAccess.Write, FileShare.Read);
-
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
@@ -431,7 +437,6 @@ class Program
         if (proc == null)
         {
             Console.Error.WriteLine("ERROR: Failed to start proxy process");
-            logStream.Close();
             return false;
         }
 
@@ -440,6 +445,7 @@ class Program
         {
             try
             {
+                using var logStream = File.Open(LogFile, FileMode.Append, FileAccess.Write, FileShare.Read);
                 using var writer = new StreamWriter(logStream) { AutoFlush = true };
                 var stdout = proc.StandardOutput.ReadToEndAsync();
                 var stderr = proc.StandardError.ReadToEndAsync();

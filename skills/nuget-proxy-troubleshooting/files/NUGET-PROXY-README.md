@@ -17,9 +17,10 @@ dotnet test
 The install script:
 - Compiles a C# NuGet credential provider plugin from `nuget-plugin-proxy-auth-src/`
 - Installs it to `~/.nuget/plugins/netcore/` where NuGet auto-discovers it
-- Saves the original upstream proxy URL
-- Points `HTTPS_PROXY` to the local proxy on `localhost:8888`
+- Saves the original upstream proxy URL to `_NUGET_UPSTREAM_PROXY`
+- Creates a `dotnet()` shell function that routes only dotnet traffic through `localhost:8888`
 - Starts the proxy daemon
+- Global `HTTPS_PROXY` stays unchanged — other tools (curl, apt, pip) are unaffected
 
 ## How It Works
 

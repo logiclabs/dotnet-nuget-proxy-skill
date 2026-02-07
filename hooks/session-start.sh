@@ -27,7 +27,7 @@ echo "Setting up .NET NuGet proxy authentication..."
 DOTNET_VERSION=""
 if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
   # Look for TargetFramework in .csproj files to determine required SDK version
-  TFM=$(grep -rh '<TargetFramework>' "$CLAUDE_PROJECT_DIR"/*.csproj "$CLAUDE_PROJECT_DIR"/**/*.csproj 2>/dev/null \
+  TFM=$(grep -rh --include='*.csproj' '<TargetFramework>' "$CLAUDE_PROJECT_DIR" 2>/dev/null \
     | head -1 | grep -oP 'net\K[0-9]+' || true)
   if [ -n "$TFM" ]; then
     DOTNET_VERSION="$TFM"

@@ -27,10 +27,9 @@ When submitting a bug report, include:
 - **Environment details**:
   - OS and version
   - .NET SDK version
-  - Python version
-  - Claude Code version
+  - Claude Code version (desktop or web)
 - **Logs and error messages**:
-  - Output from `/nuget-proxy-debug`
+  - Output from `dotnet ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth.dll --status`
   - Content of `/tmp/nuget-proxy.log`
   - Relevant console output
 - **Screenshots** if applicable
@@ -69,10 +68,10 @@ Follow the code style and structure:
 
 #### Plugin Structure Rules
 
-- **ONLY** `plugin.json` goes in `.claude-plugin/`
+- **ONLY** `plugin.json` and `marketplace.json` go in `.claude-plugin/`
 - Skills go in `skills/` directory
-- Commands go in `commands/` directory
 - Hooks go in `hooks/` directory
+- C# credential provider source goes in `skills/nuget-proxy-troubleshooting/files/nuget-plugin-proxy-auth-src/`
 
 #### Skill Guidelines
 
@@ -87,26 +86,13 @@ description: Clear description for Claude to understand when to use this skill
 Clear, concise instructions for what this skill does...
 ```
 
-#### Command Guidelines
-
-```markdown
----
-name: command-name
-description: What this command does
----
-
-# Command Title
-
-User-friendly description and usage instructions...
-```
-
 #### Code Style
 
-**Python**:
-- Follow PEP 8
-- Use descriptive variable names
-- Add comments for complex logic
-- Handle errors gracefully
+**C#**:
+- Single-file implementation in `Program.cs`
+- Use nullable reference types (`#nullable enable`)
+- Handle errors gracefully with try/catch
+- Log to stderr via `Console.Error.WriteLine`
 
 **Bash**:
 - Use clear variable names
@@ -124,23 +110,26 @@ User-friendly description and usage instructions...
 #### Test in Claude Code
 
 ```bash
-# Test with local plugin directory
-claude-code --plugin-dir /path/to/dotnet-nuget-proxy-skill
+# Run the plugin structure verification
+bash verify-plugin.sh
 
-# Then test the commands:
-/nuget-proxy-debug
-/nuget-proxy-fix
-/nuget-proxy-verify
+# Test the credential provider compiles
+cd skills/nuget-proxy-troubleshooting/files/nuget-plugin-proxy-auth-src
+dotnet build
+
+# Test the install script (in a proxy environment)
+source skills/nuget-proxy-troubleshooting/files/install-credential-provider.sh
+dotnet restore
 ```
 
 #### Test Checklist
 
 - [ ] Skills load without errors
-- [ ] Commands execute correctly
 - [ ] Hooks trigger at appropriate times
+- [ ] Credential provider compiles cleanly
 - [ ] Proxy starts successfully
-- [ ] dotnet restore works through proxy
-- [ ] Verification tests pass
+- [ ] `dotnet restore` works through proxy
+- [ ] `verify-plugin.sh` passes all checks
 - [ ] Documentation is accurate
 - [ ] No broken links in README
 - [ ] CHANGELOG.md is updated
@@ -148,13 +137,12 @@ claude-code --plugin-dir /path/to/dotnet-nuget-proxy-skill
 #### Test Environments
 
 Test on at least one of:
-- Ubuntu/Linux
+- Ubuntu/Linux (primary target for Claude Code web)
 - macOS
 - Windows
 
 With:
 - .NET 8.0 or later
-- Python 3.8 or later
 
 ### 5. Commit Your Changes
 
@@ -203,37 +191,39 @@ When adding features or changing behavior:
 
 1. **Clean environment test**:
    ```bash
-   # Remove existing proxy files
-   rm -f nuget-proxy.py dotnet-with-proxy.sh NuGet.config
+   # Remove existing credential provider
+   rm -rf ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth
 
-   # Test setup
-   /nuget-proxy-fix
+   # Test install
+   source skills/nuget-proxy-troubleshooting/files/install-credential-provider.sh
 
-   # Verify
-   /nuget-proxy-verify
+   # Verify proxy is running
+   dotnet ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth.dll --status
    ```
 
 2. **Proxy restart test**:
    ```bash
-   # Kill proxy
-   kill $(cat /tmp/nuget-proxy.pid)
+   PLUGIN_DLL=~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth.dll
 
-   # Test auto-start
-   ./dotnet-with-proxy.sh --version
+   # Stop proxy
+   dotnet $PLUGIN_DLL --stop
+
+   # Restart proxy
+   dotnet $PLUGIN_DLL --start
    ```
 
 3. **Real project test**:
    ```bash
    # In a .NET project
-   ./dotnet-with-proxy.sh restore
-   ./dotnet-with-proxy.sh build
+   dotnet restore
+   dotnet build
    ```
 
 ### Automated Testing (Future)
 
 We welcome contributions to add automated tests:
-- Unit tests for Python proxy
-- Integration tests for wrapper script
+- Unit tests for the C# credential provider
+- Integration tests for the install script
 - End-to-end tests for full workflow
 
 ## 🎨 Code of Conduct
@@ -262,10 +252,7 @@ We are committed to providing a welcoming and inclusive experience for everyone.
 ### Prerequisites
 
 ```bash
-# Install Python 3
-python3 --version
-
-# Install .NET SDK
+# Install .NET SDK (8.0 or later)
 dotnet --version
 
 # Install Claude Code
@@ -279,14 +266,11 @@ dotnet --version
 git clone https://github.com/logiclabs/dotnet-nuget-proxy-skill.git
 cd dotnet-nuget-proxy-skill
 
-# Create a test .NET project
-mkdir test-project
-cd test-project
-dotnet new console
-cd ..
+# Verify plugin structure
+bash verify-plugin.sh
 
-# Test plugin
-claude-code --plugin-dir .
+# Build the credential provider
+dotnet build skills/nuget-proxy-troubleshooting/files/nuget-plugin-proxy-auth-src/
 ```
 
 ## 🔍 Code Review Process

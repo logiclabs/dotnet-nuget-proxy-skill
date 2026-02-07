@@ -96,18 +96,17 @@ if [ ! -f "$PLUGIN_DLL" ] || [ "$PLUGIN_SRC_DIR/Program.cs" -nt "$PLUGIN_DLL" ];
         dotnet restore "$PLUGIN_SRC_DIR" \
             -p:TargetFramework="$TFM_OVERRIDE" \
             --source "$DOTNET_PACKS" \
-            --verbosity quiet 2>/dev/null
+            --verbosity quiet 2>/dev/null || true
     fi
-    dotnet publish "$PLUGIN_SRC_DIR" \
+    if ! dotnet publish "$PLUGIN_SRC_DIR" \
         -c Release \
         -o "$PLUGIN_DIR" \
         -p:TargetFramework="$TFM_OVERRIDE" \
         --no-restore \
         --nologo \
-        -v quiet 2>&1
-    if [ $? -ne 0 ]; then
+        -v quiet 2>&1; then
         error "Failed to compile credential provider"
-        exit 1
+        return 1 2>/dev/null || exit 1
     fi
     info "Compiled plugin to: $PLUGIN_DIR"
 else

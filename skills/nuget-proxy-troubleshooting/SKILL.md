@@ -60,7 +60,7 @@ Follow these steps in order when the user wants to use .NET (if no SessionStart 
 
 ```bash
 # Find the TargetFramework in project files
-grep -rh '<TargetFramework>' *.csproj **/*.csproj 2>/dev/null
+grep -rh --include='*.csproj' '<TargetFramework>' . 2>/dev/null
 ```
 
 - `net8.0` → install `dotnet-sdk-8.0`

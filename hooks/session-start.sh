@@ -24,7 +24,7 @@ FILES_DIR="$PLUGIN_DIR/skills/nuget-proxy-troubleshooting/files"
 echo "Setting up .NET NuGet proxy authentication..."
 
 # --- Step 1: Detect required .NET SDK version from project files ---
-DOTNET_VERSION="8"
+DOTNET_VERSION=""
 if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
   # Look for TargetFramework in .csproj files to determine required SDK version
   TFM=$(grep -rh '<TargetFramework>' "$CLAUDE_PROJECT_DIR"/*.csproj "$CLAUDE_PROJECT_DIR"/**/*.csproj 2>/dev/null \
@@ -35,26 +35,33 @@ if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
   fi
 fi
 
-# --- Step 2: Install .NET SDK if not present ---
-if ! command -v dotnet &>/dev/null; then
+# If no .NET project found, skip SDK installation entirely.
+# Claude will use the SKILL.md decision flow to ask the user which version to install.
+if [ -z "$DOTNET_VERSION" ]; then
+  echo "No .NET project files found. Skipping SDK installation."
+  echo "When you need .NET, ask Claude to set it up — it will install the right version."
+  exit 0
+fi
+
+# --- Step 2: Install .NET SDK if not present or wrong version ---
+install_sdk() {
   echo "Installing .NET SDK $DOTNET_VERSION from packages.microsoft.com..."
   curl -sSL https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb \
     -o /tmp/packages-microsoft-prod.deb
-  dpkg -i /tmp/packages-microsoft-prod.deb
+  dpkg -i /tmp/packages-microsoft-prod.deb 2>/dev/null
   apt-get update --allow-insecure-repositories 2>/dev/null
   apt-get install -y --allow-unauthenticated dotnet-sdk-$DOTNET_VERSION.0 2>/dev/null
   echo ".NET SDK installed: $(dotnet --version)"
+}
+
+if ! command -v dotnet &>/dev/null; then
+  install_sdk
 else
   # Check if the installed SDK matches the required version
   INSTALLED=$(dotnet --list-sdks 2>/dev/null | grep -oP '^\K[0-9]+' | head -1 || true)
   if [ -n "$INSTALLED" ] && [ "$INSTALLED" != "$DOTNET_VERSION" ]; then
-    echo "Installed .NET SDK is $INSTALLED but project requires $DOTNET_VERSION. Installing..."
-    curl -sSL https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb \
-      -o /tmp/packages-microsoft-prod.deb
-    dpkg -i /tmp/packages-microsoft-prod.deb 2>/dev/null
-    apt-get update --allow-insecure-repositories 2>/dev/null
-    apt-get install -y --allow-unauthenticated dotnet-sdk-$DOTNET_VERSION.0 2>/dev/null
-    echo ".NET SDK $DOTNET_VERSION installed: $(dotnet --version)"
+    echo "Installed .NET SDK is $INSTALLED but project requires $DOTNET_VERSION."
+    install_sdk
   else
     echo ".NET SDK already installed: $(dotnet --version)"
   fi

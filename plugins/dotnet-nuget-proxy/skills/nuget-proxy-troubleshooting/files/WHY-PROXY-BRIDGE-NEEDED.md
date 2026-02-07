@@ -31,9 +31,12 @@ chance to retry.
 
 - [dotnet/runtime #100515](https://github.com/dotnet/runtime/issues/100515)
   "HttpClient without initial proxy auth limits capability"
-  Status: **Closed**, milestoned .NET 9.0.0. Requests `PreAuthenticateProxy`
-  property on `SocketsHttpHandler`. **Potentially partially fixed in .NET 9** -
-  worth testing.
+  Status: **Closed**, milestoned .NET 9.0.0. Despite being closed as "completed",
+  the actual fix (PR #101053) only addressed **stale credential caching** for
+  server auth (`PreAuthenticate`), NOT proxy CONNECT pre-authentication.
+  **`PreAuthenticateProxy` was never implemented** - the property does not exist
+  on `SocketsHttpHandler` in any .NET version (verified against main branch).
+  The only proxy-related properties are: `UseProxy`, `Proxy`, `DefaultProxyCredentials`.
 
 ### Layer 2: NuGet Client
 
@@ -52,22 +55,20 @@ The NuGet team labels proxy auth issues as `Resolution:BlockedByExternal`:
 
 ## What Would Need to Change (for the proxy bridge to become unnecessary)
 
-### Option A: .NET Runtime Adds Proxy Pre-Authentication (most likely path)
+### Option A: .NET Runtime Adds Proxy Pre-Authentication
 
-`SocketsHttpHandler` gains a `PreAuthenticateProxy` property (or similar) that
-sends `Proxy-Authorization` on the INITIAL CONNECT request without requiring a
-407 round-trip. Issue dotnet/runtime #100515 was milestoned for .NET 9 - **test
-with .NET 9 SDK** to see if this resolves the problem.
+`SocketsHttpHandler` would need a `PreAuthenticateProxy` property (or similar)
+that sends `Proxy-Authorization` on the INITIAL CONNECT request without requiring
+a 407 round-trip.
 
-**Action item:** When .NET 9 SDK is available in the environment, test:
-```bash
-# Install .NET 9 SDK
-apt-get install -y dotnet-sdk-9.0
+**Status (Feb 2026): NOT IMPLEMENTED.** Despite issue #100515 being closed as
+"completed" for .NET 9, the actual fix (PR #101053) only addressed stale credential
+caching for server auth. `PreAuthenticateProxy` does not exist on `SocketsHttpHandler`
+in any .NET version including the current main branch. The proxy-related properties
+remain limited to `UseProxy`, `Proxy`, and `DefaultProxyCredentials`.
 
-# Test without the proxy bridge
-HTTPS_PROXY="http://user:pass@proxy:port" dotnet restore
-```
-If this works, the proxy bridge is no longer needed for .NET 9+ environments.
+Issue [dotnet/runtime #66244](https://github.com/dotnet/runtime/issues/66244)
+(the actual pre-auth request) remains **Open** with milestone "Future".
 
 ### Option B: NuGet Reads `PROXY_AUTHORIZATION` Environment Variable
 
@@ -115,7 +116,9 @@ Implemented as a C# NuGet credential provider plugin that:
 ## Monitoring
 
 Periodically check these issues for resolution:
-- [ ] [dotnet/runtime #66244](https://github.com/dotnet/runtime/issues/66244) - Pre-auth for proxy
-- [ ] [dotnet/runtime #100515](https://github.com/dotnet/runtime/issues/100515) - .NET 9 fix
-- [ ] [dotnet/runtime #114066](https://github.com/dotnet/runtime/issues/114066) - Linux CONNECT failure
-- [ ] Test with .NET 9 SDK when available
+- [ ] [dotnet/runtime #66244](https://github.com/dotnet/runtime/issues/66244) - Pre-auth for proxy (the key issue, still Open/Future)
+- [ ] [dotnet/runtime #114066](https://github.com/dotnet/runtime/issues/114066) - Linux CONNECT failure (closed without fix)
+
+Note: [dotnet/runtime #100515](https://github.com/dotnet/runtime/issues/100515)
+was misleadingly closed as "completed" for .NET 9 but the fix (PR #101053) only
+addressed server credential caching, not proxy pre-authentication.

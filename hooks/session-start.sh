@@ -32,11 +32,24 @@ verbose() { [ "$VERBOSE" = "true" ] && echo "$1" || true; }
 # --- Step 1: Detect required .NET SDK version from project files ---
 DOTNET_VERSION=""
 if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-  TFM=$(grep -rh --include='*.csproj' '<TargetFramework>' "$CLAUDE_PROJECT_DIR" 2>/dev/null \
-    | head -1 | grep -oP 'net\K[0-9]+' || true)
-  if [ -n "$TFM" ]; then
-    DOTNET_VERSION="$TFM"
-    verbose "Detected .NET $DOTNET_VERSION from project files."
+  # 1. Check global.json first (canonical way to pin .NET SDK version)
+  if [ -f "$CLAUDE_PROJECT_DIR/global.json" ]; then
+    DOTNET_VERSION=$(grep -oP '"version"\s*:\s*"\K[0-9]+' "$CLAUDE_PROJECT_DIR/global.json" 2>/dev/null | head -1 || true)
+    if [ -n "$DOTNET_VERSION" ]; then
+      verbose "Detected .NET $DOTNET_VERSION from global.json."
+    fi
+  fi
+
+  # 2. Fall back to <TargetFramework> in .csproj files
+  #    Exclude the plugin's own .csproj (its TFM is overridden at compile time)
+  if [ -z "$DOTNET_VERSION" ]; then
+    TFM=$(grep -rh --include='*.csproj' --exclude-dir='nuget-plugin-proxy-auth-src' \
+      '<TargetFramework>' "$CLAUDE_PROJECT_DIR" 2>/dev/null \
+      | head -1 | grep -oP 'net\K[0-9]+' || true)
+    if [ -n "$TFM" ]; then
+      DOTNET_VERSION="$TFM"
+      verbose "Detected .NET $DOTNET_VERSION from project files."
+    fi
   fi
 fi
 

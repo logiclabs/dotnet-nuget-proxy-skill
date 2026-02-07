@@ -10,6 +10,8 @@ set -euo pipefail
 #   4. Persists environment variables for the session
 #
 # Only runs in Claude Code web sessions (skips on desktop/local).
+#
+# Set NUGET_PROXY_VERBOSE=true for detailed output during setup.
 
 # Only run in remote (web) sessions
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
@@ -21,69 +23,123 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(cd "$HOOK_DIR/.." && pwd)"
 FILES_DIR="$PLUGIN_DIR/skills/nuget-proxy-troubleshooting/files"
 
-echo "Setting up .NET NuGet proxy authentication..."
+VERBOSE="${NUGET_PROXY_VERBOSE:-false}"
+
+# Logging helpers — only print detail lines when verbose
+log()     { echo "$1"; }
+verbose() { [ "$VERBOSE" = "true" ] && echo "$1" || true; }
 
 # --- Step 1: Detect required .NET SDK version from project files ---
 DOTNET_VERSION=""
 if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-  # Look for TargetFramework in .csproj files to determine required SDK version
   TFM=$(grep -rh --include='*.csproj' '<TargetFramework>' "$CLAUDE_PROJECT_DIR" 2>/dev/null \
     | head -1 | grep -oP 'net\K[0-9]+' || true)
   if [ -n "$TFM" ]; then
     DOTNET_VERSION="$TFM"
-    echo "Detected .NET $DOTNET_VERSION from project files."
+    verbose "Detected .NET $DOTNET_VERSION from project files."
   fi
 fi
 
 # If no .NET project found, skip SDK installation entirely.
-# Claude will use the SKILL.md decision flow to ask the user which version to install.
 if [ -z "$DOTNET_VERSION" ]; then
-  echo "No .NET project files found. Skipping SDK installation."
-  echo "When you need .NET, ask Claude to set it up — it will install the right version."
+  verbose "No .NET project files found. Skipping SDK installation."
   exit 0
 fi
 
+# --- Fast-path: skip everything if already fully configured ---
+PLUGIN_NAME="nuget-plugin-proxy-auth"
+PLUGIN_DLL="$HOME/.nuget/plugins/netcore/$PLUGIN_NAME/$PLUGIN_NAME.dll"
+PLUGIN_SRC="$FILES_DIR/${PLUGIN_NAME}-src/Program.cs"
+
+is_sdk_installed() {
+  command -v dotnet &>/dev/null || return 1
+  local installed
+  installed=$(dotnet --list-sdks 2>/dev/null | grep -oP '^\K[0-9]+' | head -1 || true)
+  [ "$installed" = "$DOTNET_VERSION" ]
+}
+
+is_plugin_current() {
+  [ -f "$PLUGIN_DLL" ] && [ -f "$PLUGIN_SRC" ] && [ ! "$PLUGIN_SRC" -nt "$PLUGIN_DLL" ]
+}
+
+is_proxy_running() {
+  curl -s --connect-timeout 1 "http://127.0.0.1:8888" &>/dev/null || \
+    ss -tlnp 2>/dev/null | grep -q ':8888 ' 2>/dev/null || \
+    netstat -tlnp 2>/dev/null | grep -q ':8888 ' 2>/dev/null
+}
+
+if is_sdk_installed && is_plugin_current && is_proxy_running; then
+  verbose ".NET SDK, plugin, and proxy already configured — fast-path."
+
+  # Still need to persist the dotnet() function and env for this session
+  if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+    UPSTREAM_PROXY="${_NUGET_UPSTREAM_PROXY:-${HTTPS_PROXY:-${https_proxy:-${HTTP_PROXY:-${http_proxy:-}}}}}"
+    # Strip localhost proxy (use saved upstream)
+    if echo "$UPSTREAM_PROXY" | grep -qE "127\.0\.0\.1|localhost"; then
+      UPSTREAM_PROXY="${_NUGET_UPSTREAM_PROXY:-$UPSTREAM_PROXY}"
+    fi
+    echo "export _NUGET_UPSTREAM_PROXY=\"${UPSTREAM_PROXY}\"" >> "$CLAUDE_ENV_FILE"
+    cat >> "$CLAUDE_ENV_FILE" << 'DOTNET_FUNC'
+dotnet() {
+    HTTPS_PROXY="http://127.0.0.1:8888" \
+    HTTP_PROXY="http://127.0.0.1:8888" \
+    https_proxy="http://127.0.0.1:8888" \
+    http_proxy="http://127.0.0.1:8888" \
+    _NUGET_UPSTREAM_PROXY="${_NUGET_UPSTREAM_PROXY}" \
+    command dotnet "$@"
+}
+export -f dotnet
+DOTNET_FUNC
+  fi
+  log ".NET NuGet proxy ready."
+  exit 0
+fi
+
+log "Setting up .NET NuGet proxy authentication..."
+
 # --- Step 2: Install .NET SDK if not present or wrong version ---
 install_sdk() {
-  echo "Installing .NET SDK $DOTNET_VERSION from packages.microsoft.com..."
-  curl -sSL https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb \
-    -o /tmp/packages-microsoft-prod.deb
-  dpkg -i /tmp/packages-microsoft-prod.deb 2>/dev/null
-  apt-get update --allow-insecure-repositories 2>/dev/null
-  apt-get install -y --allow-unauthenticated dotnet-sdk-$DOTNET_VERSION.0 2>/dev/null
-  echo ".NET SDK installed: $(dotnet --version)"
+  log "Installing .NET SDK $DOTNET_VERSION..."
+  if [ "$VERBOSE" = "true" ]; then
+    curl -sSL https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb \
+      -o /tmp/packages-microsoft-prod.deb
+    dpkg -i /tmp/packages-microsoft-prod.deb
+    apt-get update --allow-insecure-repositories
+    apt-get install -y --allow-unauthenticated dotnet-sdk-$DOTNET_VERSION.0
+  else
+    curl -sSL https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb \
+      -o /tmp/packages-microsoft-prod.deb
+    dpkg -i /tmp/packages-microsoft-prod.deb >/dev/null 2>&1
+    apt-get update --allow-insecure-repositories >/dev/null 2>&1
+    apt-get install -y --allow-unauthenticated dotnet-sdk-$DOTNET_VERSION.0 >/dev/null 2>&1
+  fi
+  log ".NET SDK installed: $(dotnet --version)"
 }
 
 if ! command -v dotnet &>/dev/null; then
   install_sdk
 else
-  # Check if the installed SDK matches the required version
   INSTALLED=$(dotnet --list-sdks 2>/dev/null | grep -oP '^\K[0-9]+' | head -1 || true)
   if [ -n "$INSTALLED" ] && [ "$INSTALLED" != "$DOTNET_VERSION" ]; then
-    echo "Installed .NET SDK is $INSTALLED but project requires $DOTNET_VERSION."
+    verbose "Installed .NET SDK is $INSTALLED but project requires $DOTNET_VERSION."
     install_sdk
   else
-    echo ".NET SDK already installed: $(dotnet --version)"
+    verbose ".NET SDK already installed: $(dotnet --version)"
   fi
 fi
 
 # --- Step 3: Set up the credential provider and proxy ---
 if [ -f "$FILES_DIR/install-credential-provider.sh" ]; then
-  source "$FILES_DIR/install-credential-provider.sh"
+  # Pass quiet mode to the install script
+  NUGET_PROXY_VERBOSE="$VERBOSE" source "$FILES_DIR/install-credential-provider.sh"
 else
   echo "WARNING: install-credential-provider.sh not found at $FILES_DIR"
-  echo "NuGet proxy authentication will not be configured."
   exit 0
 fi
 
 # --- Step 4: Persist the upstream proxy and dotnet function for the session ---
-# Only _NUGET_UPSTREAM_PROXY needs persisting — global HTTPS_PROXY stays unchanged.
-# The dotnet() shell function (created by install-credential-provider.sh) scopes
-# the local proxy to dotnet commands only, so other tools are unaffected.
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   echo "export _NUGET_UPSTREAM_PROXY=\"${_NUGET_UPSTREAM_PROXY:-}\"" >> "$CLAUDE_ENV_FILE"
-  # Re-export the dotnet shell function so it survives across subshells
-  LOCAL_PROXY="http://127.0.0.1:8888"
   cat >> "$CLAUDE_ENV_FILE" << 'DOTNET_FUNC'
 dotnet() {
     HTTPS_PROXY="http://127.0.0.1:8888" \
@@ -95,7 +151,7 @@ dotnet() {
 }
 export -f dotnet
 DOTNET_FUNC
-  echo "Environment persisted for session."
+  verbose "Environment persisted for session."
 fi
 
-echo ".NET NuGet proxy setup complete."
+log ".NET NuGet proxy setup complete."

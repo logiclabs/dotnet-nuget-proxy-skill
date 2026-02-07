@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Fast-path startup**: When SDK, plugin, and proxy are already configured, the
+  SessionStart hook skips all setup and persists env in under a second.
+- **Quiet output by default**: Startup scripts suppress apt/dpkg/dotnet noise.
+  Set `NUGET_PROXY_VERBOSE=true` for detailed output during setup.
 - **Scoped proxy**: `dotnet()` shell function routes only dotnet traffic through the
   local proxy. Global `HTTPS_PROXY` / `HTTP_PROXY` are no longer overwritten, so other
   tools (curl, apt, pip) continue to use the upstream proxy unchanged.

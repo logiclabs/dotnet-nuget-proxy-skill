@@ -15,6 +15,8 @@
 #
 # IMPORTANT: Use `source` (not `bash` or `./`) so the shell function
 # and env vars apply to the current shell.
+#
+# Set NUGET_PROXY_VERBOSE=true for detailed output.
 
 set -e
 
@@ -23,14 +25,16 @@ PLUGIN_NAME="nuget-plugin-proxy-auth"
 PLUGIN_SRC_DIR="$SCRIPT_DIR/${PLUGIN_NAME}-src"
 LOCAL_PROXY="http://127.0.0.1:8888"
 
+VERBOSE="${NUGET_PROXY_VERBOSE:-false}"
+
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-info()  { echo -e "${GREEN}[OK]${NC} $1"; }
-warn()  { echo -e "${YELLOW}[!!]${NC} $1"; }
-error() { echo -e "${RED}[ERR]${NC} $1"; }
+info()    { [ "$VERBOSE" = "true" ] && echo -e "${GREEN}[OK]${NC} $1" || true; }
+error()   { echo -e "${RED}[ERR]${NC} $1"; }
+log()     { echo "$1"; }
+verbose() { [ "$VERBOSE" = "true" ] && echo "$1" || true; }
 
 # --- Verify prerequisites ---
 if [ ! -d "$PLUGIN_SRC_DIR" ]; then
@@ -43,9 +47,7 @@ if ! command -v dotnet &> /dev/null; then
     return 1 2>/dev/null || exit 1
 fi
 
-echo "Installing NuGet Proxy Credential Provider"
-echo "==========================================="
-echo ""
+verbose "Installing NuGet Proxy Credential Provider"
 
 # --- Capture the original upstream proxy ---
 UPSTREAM_PROXY="${_NUGET_UPSTREAM_PROXY:-${HTTPS_PROXY:-${https_proxy:-${HTTP_PROXY:-${http_proxy:-}}}}}"
@@ -71,7 +73,7 @@ fi
 OLD_PLUGIN_DIR="$HOME/.nuget/plugins/$PLUGIN_NAME"
 if [ -d "$OLD_PLUGIN_DIR" ] && [ ! -d "$OLD_PLUGIN_DIR/$PLUGIN_NAME" ]; then
     rm -rf "$OLD_PLUGIN_DIR"
-    warn "Removed old plugin installation"
+    verbose "Removed old plugin installation"
 fi
 
 # --- Compile the plugin (if needed) ---
@@ -80,7 +82,7 @@ PLUGIN_DIR="$HOME/.nuget/plugins/netcore/$PLUGIN_NAME"
 PLUGIN_DLL="$PLUGIN_DIR/$PLUGIN_NAME.dll"
 
 if [ ! -f "$PLUGIN_DLL" ] || [ "$PLUGIN_SRC_DIR/Program.cs" -nt "$PLUGIN_DLL" ]; then
-    echo "Compiling credential provider..."
+    log "Compiling credential provider..."
 
     # Detect the installed SDK major version so we compile against matching
     # framework packs. The .csproj defaults to net8.0 but the installed SDK
@@ -139,29 +141,17 @@ export -f dotnet
 info "Created dotnet() shell function (proxy scoped to dotnet only)"
 
 # --- Start the proxy daemon ---
-echo ""
 # Use 'command dotnet' to bypass our shell function (daemon needs the real upstream proxy)
 _NUGET_UPSTREAM_PROXY="$UPSTREAM_PROXY" command dotnet "$PLUGIN_DLL" --start 2>/dev/null
 if [ $? -eq 0 ]; then
     info "Proxy daemon started"
 else
-    warn "Proxy may already be running or failed to start"
+    verbose "Proxy may already be running or failed to start"
 fi
 
-echo ""
-echo "==========================================="
-echo ""
-info "Installation complete!"
-echo ""
-echo "  The dotnet() shell function routes NuGet traffic through the"
-echo "  local proxy. Other tools (curl, apt, pip) are unaffected."
-echo ""
-echo "  Just run: dotnet restore"
-echo ""
-echo "  To persist across sessions, source this script at startup:"
-echo "    source $SCRIPT_DIR/install-credential-provider.sh"
-echo ""
-
-# --- Verify ---
-echo "Verification:"
-_NUGET_UPSTREAM_PROXY="$UPSTREAM_PROXY" command dotnet "$PLUGIN_DLL" --status 2>/dev/null
+# --- Verification (verbose only) ---
+if [ "$VERBOSE" = "true" ]; then
+    echo ""
+    echo "Verification:"
+    _NUGET_UPSTREAM_PROXY="$UPSTREAM_PROXY" command dotnet "$PLUGIN_DLL" --status 2>/dev/null
+fi

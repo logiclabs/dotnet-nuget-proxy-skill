@@ -3,33 +3,30 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/logiclabs/dotnet-nuget-proxy-skill/releases)
 
-A comprehensive Claude Code plugin that diagnoses and fixes .NET NuGet proxy authentication issues in containerized and proxy-authenticated environments.
+A Claude Code plugin that fixes .NET NuGet proxy authentication issues in containerized and proxy-authenticated environments.
 
-## 🎯 Problem Solved
+## Problem Solved
 
-In containerized Claude Code environments with JWT-authenticated proxies, NuGet package restoration fails with 401 authentication errors because NuGet doesn't support the required authentication method. This plugin provides:
+In containerized Claude Code environments with JWT-authenticated proxies, NuGet package restoration fails with 401 authentication errors. This happens because .NET's `SocketsHttpHandler` does not send `Proxy-Authorization` on the initial HTTPS CONNECT request ([dotnet/runtime #66244](https://github.com/dotnet/runtime/issues/66244)).
 
-- **Custom Python proxy bridge** that handles authentication transparently
-- **Auto-starting wrapper scripts** for seamless dotnet command execution
-- **Comprehensive diagnostics** to identify proxy configuration issues
-- **Automated setup** with backup and validation
-- **Complete troubleshooting guide** built into AI assistance
+This plugin provides a **C# NuGet credential provider** that embeds a local proxy bridge, handling authentication transparently. After setup, `dotnet restore` works without wrapper scripts or NuGet.Config changes.
 
-## ✨ Features
+## How It Works
 
-- 🔍 **Automatic Diagnostics**: Analyzes environment variables, NuGet.config, and network connectivity
-- 🔧 **One-Command Fix**: Sets up complete proxy solution with all necessary files
-- ✅ **Verification Testing**: Validates configuration with real NuGet operations
-- 💾 **Backup Management**: Creates timestamped backups before modifications
-- 🌍 **Cross-Platform**: Supports Windows, macOS, and Linux
-- 🤖 **AI-Powered Help**: Claude understands and troubleshoots proxy issues automatically
-- ⚡ **Auto-Starting Proxy**: Wrapper script manages proxy lifecycle automatically
+```
+NuGet -> localhost:8888 (credential provider proxy) -> Upstream Proxy (JWT injected) -> nuget.org
+         [no auth required]                            [Proxy-Authorization header]     [internet]
+```
 
-## 📦 Installation
+The C# credential provider:
+- Compiles to a .NET DLL in `~/.nuget/plugins/netcore/` for auto-discovery by NuGet
+- Embeds an HTTP/HTTPS proxy that injects JWT auth into upstream proxy requests
+- Manages the proxy lifecycle as a background daemon
+- Implements the NuGet cross-platform plugin protocol v2
+
+## Installation
 
 ### Claude Code (Desktop CLI)
-
-Add the marketplace and install the plugin:
 
 ```
 /plugin marketplace add logiclabs/dotnet-nuget-proxy-skill
@@ -42,227 +39,144 @@ Add the marketplace and install the plugin:
 2. Run `/plugin marketplace add logiclabs/dotnet-nuget-proxy-skill`
 3. Run `/plugin install dotnet-nuget-proxy@dotnet-nuget-proxy`
 
-The plugin will be available immediately in your session. It persists across sessions once installed.
-
 ### Manual Installation
 
 ```bash
 git clone https://github.com/logiclabs/dotnet-nuget-proxy-skill ~/.claude/plugins/dotnet-nuget-proxy
 ```
 
-Then restart Claude Code to load the plugin.
+## Quick Start
 
-## 🚀 Quick Start
+### 1. Set Up the Credential Provider
 
-### 1. Diagnose Current Setup
-
-```
-/nuget-proxy-debug
+```bash
+source install-credential-provider.sh
 ```
 
-Claude will analyze your environment and identify any proxy configuration issues.
+This compiles the C# plugin, installs it, starts the proxy daemon, and configures environment variables.
 
-### 2. Auto-Fix Configuration
+### 2. Use dotnet Normally
 
-```
-/nuget-proxy-fix
-```
-
-This automatically:
-- Creates the custom Python proxy bridge (nuget-proxy.py)
-- Sets up auto-starting wrapper script (dotnet-with-proxy.sh)
-- Configures NuGet.config to use local proxy
-- Creates helper scripts and documentation
-- Backs up existing configurations
-
-### 3. Verify Everything Works
-
-```
-/nuget-proxy-verify
+```bash
+dotnet restore
+dotnet build
+dotnet run
 ```
 
-Tests the proxy configuration with real NuGet operations and confirms everything is working.
+No wrapper scripts needed.
 
-## 📚 Usage
-
-### Slash Commands
+### 3. Slash Commands
 
 | Command | Description |
 |---------|-------------|
-| `/nuget-proxy-debug` | Run comprehensive diagnostics on proxy configuration |
-| `/nuget-proxy-fix` | Automatically set up the proxy solution |
-| `/nuget-proxy-verify` | Test and validate proxy configuration |
+| `/nuget-proxy-debug` | Run diagnostics on proxy configuration |
+| `/nuget-proxy-fix` | Set up the proxy solution |
+| `/nuget-proxy-verify` | Test and validate the configuration |
 
-### Natural Language
-
-You can also just ask Claude naturally:
-
+You can also ask Claude naturally:
 - "I'm getting 401 errors when running dotnet restore"
 - "Help me fix NuGet proxy authentication"
 - "Set up NuGet to work with the proxy"
-- "Why is my package restore failing?"
 
-Claude will automatically use the plugin skills to help troubleshoot and fix issues.
+## Architecture
 
-### Using the Wrapper Script
+### Components
 
-After running `/nuget-proxy-fix`, use the wrapper script for all dotnet commands:
+1. **nuget-plugin-proxy-auth-src/** - C# source for the credential provider:
+   - `Program.cs` - Self-contained proxy server + NuGet plugin protocol + daemon management
+   - `nuget-plugin-proxy-auth.csproj` - .NET 8.0 project file
+   - Compiled on first install via `dotnet publish`
 
-```bash
-# The wrapper auto-starts the proxy if needed
-./dotnet-with-proxy.sh restore
-./dotnet-with-proxy.sh build
-./dotnet-with-proxy.sh run
-./dotnet-with-proxy.sh test
+2. **install-credential-provider.sh** - Install script that:
+   - Compiles the C# plugin (if needed)
+   - Captures original upstream proxy URL as `_NUGET_UPSTREAM_PROXY`
+   - Points `HTTPS_PROXY` to `http://127.0.0.1:8888`
+   - Starts the proxy daemon
+   - No NuGet.Config changes needed
 
-# Or create an alias
-source setup-dotnet-alias.sh
-dotnet restore  # Now uses proxy automatically
-```
-
-## 🏗️ How It Works
-
-### Architecture
-
-```
-NuGet CLI → localhost:8888 → Custom Python Proxy → Authenticated Proxy → nuget.org
-            (no auth)         (adds JWT auth)       (Claude Code)      (internet)
-```
-
-### Components Created
-
-1. **nuget-proxy.py**: Python HTTP/HTTPS proxy that:
-   - Listens on localhost:8888 (unauthenticated)
-   - Forwards to Claude Code proxy with JWT authentication
-   - Handles HTTPS CONNECT tunneling
-
-2. **dotnet-with-proxy.sh**: Wrapper script that:
-   - Detects if proxy is running
-   - Auto-starts proxy if needed
-   - Sets HTTP_PROXY/HTTPS_PROXY environment variables
-   - Runs dotnet commands seamlessly
-
-3. **NuGet.config**: Configuration file pointing to localhost:8888
-
-4. **NUGET-PROXY-README.md**: Complete documentation and troubleshooting guide
-
-## 🛠️ Plugin Skills
-
-The plugin includes the following skills that Claude uses automatically:
-
-### `/dotnet-nuget-proxy:nuget-proxy-troubleshooting`
-
-Comprehensive skill that provides:
-- Problem diagnosis and understanding
-- Solution architecture documentation
-- Quick start instructions
-- Troubleshooting for common issues
-- File recreation steps
-- Best practices
-
-## 🔧 Configuration
+3. **Legacy files** (still functional as fallback):
+   - `nuget-proxy.py` - Standalone Python proxy (no compilation needed)
+   - `dotnet-with-proxy.sh` - Wrapper script that auto-starts Python proxy
 
 ### Environment Variables
 
-The solution uses these environment variables (automatically set by Claude Code):
-- `HTTP_PROXY` - Used by Python proxy to connect upstream
-- `HTTPS_PROXY` - Same as HTTP_PROXY
-- `PROXY_AUTHORIZATION` - JWT token for authentication
+| Variable | Purpose |
+|----------|---------|
+| `_NUGET_UPSTREAM_PROXY` | Original upstream proxy URL (set by install script) |
+| `HTTPS_PROXY` | Points to localhost:8888 after install |
+| `PROXY_AUTHORIZATION` | JWT or Basic auth token (read by Claude Code) |
 
-### NuGet.config Locations
+## Proxy Management
 
-The plugin works with standard NuGet.config locations:
-- **User-level**: `%APPDATA%\NuGet\NuGet.config` (Windows) or `~/.nuget/NuGet/NuGet.config` (Unix)
-- **Project-level**: `./NuGet.config`
-- **Solution-level**: `./NuGet.config` (at solution root)
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-#### "Connection refused on port 8888"
-
-**Solution**: Start the proxy
 ```bash
-python3 nuget-proxy.py &
-# or use wrapper script
-./dotnet-with-proxy.sh restore
+# Check status
+dotnet ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth.dll --status
+
+# Start proxy
+dotnet ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth.dll --start
+
+# Stop proxy
+dotnet ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth.dll --stop
 ```
 
-#### "Address already in use"
+## Troubleshooting
 
-**Solution**: Check what's using port 8888
+### "401 Unauthorized" during dotnet restore
 ```bash
-ps aux | grep nuget-proxy
-# If it's the proxy, you're good!
-```
-
-#### Still getting 401 errors
-
-**Solution**: Run diagnostics
-```
+# Run diagnostics
 /nuget-proxy-debug
+
+# Or re-run the install script
+source install-credential-provider.sh
 ```
 
-This will identify the specific issue and provide targeted recommendations.
+### "Connection refused on port 8888"
+```bash
+# Start the proxy daemon
+dotnet ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth.dll --start
+```
 
-### Getting Help
+### Plugin not found by NuGet
+```bash
+# Verify the DLL exists
+ls ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth.dll
 
-1. **With Claude**: Simply describe the issue naturally
-2. **Slash Commands**: Use `/nuget-proxy-debug` for detailed diagnostics
-3. **GitHub Issues**: [Report issues here](https://github.com/logiclabs/dotnet-nuget-proxy-skill/issues)
+# Recompile if needed
+source install-credential-provider.sh
+```
 
-## 📋 Requirements
+### Check proxy logs
+```bash
+cat /tmp/nuget-proxy.log
+```
 
-- **Python 3.x** (for proxy bridge)
-- **.NET SDK** (any version)
+## Installing the .NET SDK
+
+The default `dot.net` install script redirects to `builds.dotnet.microsoft.com`, which is blocked by the proxy allowlist. Instead use `packages.microsoft.com`:
+
+```bash
+curl -sSL https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb -o /tmp/packages-microsoft-prod.deb
+dpkg -i /tmp/packages-microsoft-prod.deb
+apt-get update && apt-get install -y dotnet-sdk-8.0
+```
+
+## Requirements
+
+- **.NET SDK 8.0+** (for compiling the credential provider)
 - **Claude Code** environment with proxy authentication
+- Python 3.x (only if using the legacy fallback)
 
-## 🤝 Contributing
+## Contributing
 
-Contributions are welcome! Please:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Test your changes in Claude Code
-4. Commit your changes (`git commit -m 'Add amazing feature'`)
-5. Push to the branch (`git push origin feature/amazing-feature`)
-6. Open a Pull Request
+## License
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+MIT - see [LICENSE](LICENSE).
 
-## 📝 License
+## Documentation
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Built for the Claude Code community
-- Addresses proxy authentication challenges in containerized environments
-- Inspired by real-world .NET development challenges
-
-## 📖 Documentation
-
-- [Quick Start Guide](plugins/dotnet-nuget-proxy/skills/nuget-proxy-troubleshooting/SKILL.md)
-- [Detailed Proxy Documentation](plugins/dotnet-nuget-proxy/skills/nuget-proxy-troubleshooting/files/NUGET-PROXY-README.md)
+- [Skill Documentation](plugins/dotnet-nuget-proxy/skills/nuget-proxy-troubleshooting/SKILL.md)
+- [Proxy README](plugins/dotnet-nuget-proxy/skills/nuget-proxy-troubleshooting/files/NUGET-PROXY-README.md)
+- [Why a Proxy Bridge is Needed](plugins/dotnet-nuget-proxy/skills/nuget-proxy-troubleshooting/files/WHY-PROXY-BRIDGE-NEEDED.md)
 - [Changelog](CHANGELOG.md)
-
-## 🔗 Links
-
-- [GitHub Repository](https://github.com/logiclabs/dotnet-nuget-proxy-skill)
-- [Issue Tracker](https://github.com/logiclabs/dotnet-nuget-proxy-skill/issues)
-- [Claude Code Documentation](https://code.claude.com/docs)
-
-## 💡 Pro Tips
-
-1. **Keep proxy running** - The wrapper script handles this automatically
-2. **Use wrapper script** - Always prefer `./dotnet-with-proxy.sh` over direct dotnet commands
-3. **Check logs** - When issues occur, check `/tmp/nuget-proxy.log` first
-4. **Commit proxy files** - Add them to your repository so teammates benefit too
-5. **Run verify after setup** - Always run `/nuget-proxy-verify` to confirm everything works
-
----
-
-**Made with ❤️ for the Claude Code community**
-
-If this plugin helps you, please ⭐ star the repository!

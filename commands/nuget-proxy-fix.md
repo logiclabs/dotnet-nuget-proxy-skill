@@ -1,66 +1,61 @@
 ---
 name: nuget-proxy-fix
-description: Fix .NET NuGet proxy authentication issues using a credential provider or proxy bridge
+description: Fix .NET NuGet proxy authentication issues using a C# credential provider with embedded proxy bridge
 ---
 
 # NuGet Proxy Fix Command
 
-This command fixes NuGet authentication in environments with JWT-authenticated proxies (like Claude Code) where NuGet doesn't pass the `PROXY_AUTHORIZATION` environment variable to the downstream proxy.
+This command fixes NuGet authentication in environments with JWT-authenticated proxies (like Claude Code) where NuGet doesn't pass proxy credentials during HTTPS CONNECT tunnel setup.
 
 ## What This Does
 
 1. **Diagnoses the problem**: Checks environment variables and proxy configuration
-2. **Installs credential provider** (preferred): Sets up the NuGet cross-platform credential provider plugin that supplies JWT proxy credentials from the environment
-3. **Falls back to proxy bridge** (if needed): Sets up the Python proxy bridge as an alternative
+2. **Compiles and installs the credential provider**: Builds the C# NuGet plugin from source
+3. **Starts the proxy daemon**: Launches the local proxy bridge on localhost:8888
 4. **Tests the solution**: Verifies everything works with a test restore
 
-## Approach A: Credential Provider (Recommended)
+## Recommended: C# Credential Provider
 
-The credential provider plugs directly into NuGet's authentication pipeline:
-- No background proxy process needed
-- No wrapper script needed
-- Uses NuGet's native cross-platform plugin protocol v2
-- Reads JWT from `PROXY_AUTHORIZATION` environment variable
+The credential provider is a self-contained C# NuGet plugin that:
+- Compiles to a .NET DLL installed in `~/.nuget/plugins/netcore/` for auto-discovery
+- Embeds an HTTP/HTTPS proxy that injects JWT auth into upstream proxy requests
+- Manages the proxy lifecycle as a background daemon
+- Implements the NuGet cross-platform plugin protocol v2
 
 ### Setup
 
 ```bash
-# Install the credential provider
-./install-credential-provider.sh
+# Install (compiles plugin, starts proxy, sets env vars)
+source install-credential-provider.sh
 
-# Set plugin path
-export NUGET_PLUGIN_PATHS="$HOME/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth"
-
-# Use dotnet normally
+# Then just use dotnet normally - no wrapper scripts needed
 dotnet restore
 dotnet build
 ```
 
-## Approach B: Proxy Bridge (Fallback)
+### What Gets Created
 
-If the credential provider doesn't work with the NuGet version in use:
+- **nuget-plugin-proxy-auth-src/** - C# source (Program.cs + .csproj)
+- **install-credential-provider.sh** - Installation and setup script
+- **~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/** - Compiled plugin (auto-discovered by NuGet)
+
+## Fallback: Python Proxy Bridge
+
+If the .NET SDK is not yet available to compile the C# plugin:
 
 ```bash
-./dotnet-with-proxy.sh restore
-./dotnet-with-proxy.sh build
+python3 nuget-proxy.py &
+HTTPS_PROXY=http://127.0.0.1:8888 dotnet restore
 ```
+
+### Legacy Files (still functional)
+
+- **nuget-proxy.py** - Standalone Python proxy implementation
+- **dotnet-with-proxy.sh** - Wrapper script that auto-starts Python proxy
 
 ## When to Use
 
 Use this command when you encounter:
 - `401 Unauthorized` errors during `dotnet restore`
 - `407 Proxy Authentication Required` errors
-- NuGet proxy authentication failures
-- Package restore failures in proxy environments
-- Claude Code containerized environment NuGet issues
-
-## What Gets Created
-
-### Credential Provider
-- **nuget-plugin-proxy-auth**: NuGet cross-platform credential provider plugin (Python)
-- **install-credential-provider.sh**: Installation and setup script
-
-### Proxy Bridge (Fallback)
-- **nuget-proxy.py**: Python HTTP/HTTPS proxy bridge
-- **dotnet-with-proxy.sh**: Wrapper script that auto-starts proxy
-- **NuGet.config**: NuGet configuration pointing to local proxy
+- NuGet proxy authentication failures in containerized environments

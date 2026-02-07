@@ -9,12 +9,11 @@ Tests and validates that the NuGet proxy solution is working correctly.
 
 ## What This Does
 
-1. **Checks proxy status**: Verifies the proxy is running on port 8888
-2. **Tests environment**: Validates HTTP_PROXY and HTTPS_PROXY variables
-3. **Verifies NuGet.config**: Confirms configuration is correct
+1. **Checks credential provider**: Verifies the C# plugin DLL exists in ~/.nuget/plugins/netcore/
+2. **Checks proxy status**: Verifies the proxy daemon is running on port 8888
+3. **Tests environment**: Validates HTTPS_PROXY and _NUGET_UPSTREAM_PROXY variables
 4. **Tests package restore**: Attempts to restore packages from NuGet.org
-5. **Checks authentication**: Validates proxy authentication is working
-6. **Measures performance**: Records response times and connection metrics
+5. **Checks authentication**: Validates proxy authentication is working end-to-end
 
 ## Usage
 
@@ -24,35 +23,24 @@ Tests and validates that the NuGet proxy solution is working correctly.
 
 ## Test Sequence
 
-1. **Proxy Process Check**: Confirms nuget-proxy.py is running
-2. **Port Availability**: Verifies port 8888 is accessible
-3. **Environment Variables**: Checks proxy variables are set
-4. **NuGet Configuration**: Validates NuGet.config syntax and proxy settings
-5. **Network Connectivity**: Tests connection to nuget.org through proxy
-6. **Package Search**: Attempts to search for a known package
-7. **Package Restore**: Runs a test restore operation
+1. **Credential Provider Check**: Confirms nuget-plugin-proxy-auth.dll is installed
+2. **Proxy Daemon Check**: Verifies port 8888 is accessible
+3. **Environment Variables**: Checks HTTPS_PROXY points to localhost:8888
+4. **Network Connectivity**: Tests connection to nuget.org through proxy
+5. **Package Restore**: Runs a test restore operation
 
 ## Success Criteria
 
-✅ Proxy running on port 8888
-✅ Environment variables configured
-✅ NuGet.config exists and valid
-✅ Can connect to NuGet.org through proxy
-✅ Package search succeeds
-✅ Package restore succeeds
+- Credential provider DLL exists in ~/.nuget/plugins/netcore/
+- Proxy daemon running on port 8888
+- HTTPS_PROXY set to http://127.0.0.1:8888
+- Can connect to NuGet.org through proxy
+- Package restore succeeds
 
 ## If Tests Fail
 
 The command will provide specific error messages and recommendations:
-- If proxy not running: Start with `python3 nuget-proxy.py &`
-- If config missing: Run `/nuget-proxy-fix` to create it
-- If authentication fails: Check PROXY_AUTHORIZATION environment variable
+- If plugin not installed: Run `source install-credential-provider.sh`
+- If proxy not running: Run `dotnet <plugin-dll> --start`
+- If authentication fails: Check _NUGET_UPSTREAM_PROXY and PROXY_AUTHORIZATION
 - If port conflict: Check what's using port 8888 with `lsof -i :8888`
-
-## Performance Metrics
-
-Reports include:
-- Proxy response time
-- Package download speed
-- Connection establishment time
-- Overall restore duration

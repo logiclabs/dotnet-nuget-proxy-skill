@@ -97,23 +97,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **C# NuGet Credential Provider** - Self-contained .NET plugin replacing Python scripts
+  - Compiles to a .NET DLL in `~/.nuget/plugins/netcore/` for NuGet auto-discovery
+  - Embeds HTTP/HTTPS proxy server with JWT auth injection
+  - Manages proxy lifecycle as a background daemon (start/stop/health check)
+  - Implements NuGet cross-platform plugin protocol v2
+  - No wrapper scripts or NuGet.Config changes needed after install
+- **install-credential-provider.sh** - One-command setup: compiles, installs, configures
+- **WHY-PROXY-BRIDGE-NEEDED.md** - Technical analysis documenting:
+  - Root cause: .NET's `SocketsHttpHandler` doesn't pre-authenticate with proxies
+  - `PreAuthenticateProxy` was never implemented (verified against .NET main branch)
+  - GitHub issue tracking for dotnet/runtime #66244, #114066, #100515
+  - What would need to change for this workaround to become unnecessary
+
+### Changed
+- Updated hook (`pre-dotnet-restore.sh`) to detect C# credential provider
+- Updated all slash commands to lead with C# approach
+- Updated README.md and NUGET-PROXY-README.md for C# credential provider
+- Python proxy files (`nuget-proxy.py`, `dotnet-with-proxy.sh`) retained as legacy fallback
+
 ### Planned Features
 - Support for custom proxy ports
-- Configuration file for proxy settings
-- Enhanced logging with rotation
-- Integration with dotnet global tools
+- Linux systemd service file for proxy daemon
 - Support for private NuGet feeds
-- Windows service installation option
-- macOS launchd integration
-- Linux systemd service file
 - Multi-proxy support for complex networks
-
-### Potential Improvements
-- Performance metrics dashboard
-- Automatic proxy health checks
-- Self-healing capabilities
-- Better error recovery
-- Integration with CI/CD pipelines
 
 ---
 

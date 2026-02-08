@@ -26,10 +26,13 @@ jobs:
             .claude/ \
             skills/ \
             hooks/ \
+            install.sh \
+            verify-plugin.sh \
             global.json \
             README.md \
             LICENSE \
-            CHANGELOG.md
+            CHANGELOG.md \
+            CONTRIBUTING.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

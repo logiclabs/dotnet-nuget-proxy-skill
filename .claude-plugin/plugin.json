@@ -1,6 +1,6 @@
 {
   "name": "dotnet-nuget-proxy",
-  "description": "Diagnoses and fixes .NET NuGet proxy authentication issues in containerized and proxy-authenticated environments. Provides custom proxy bridge, auto-starting wrapper scripts, and comprehensive troubleshooting.",
+  "description": "Enables .NET development in Claude Code web sessions by fixing NuGet proxy authentication. Provides a C# credential provider plugin with embedded proxy bridge, SessionStart hook for automatic setup, and comprehensive troubleshooting.",
   "version": "1.0.0",
   "author": {
     "name": "Claude Code Community",

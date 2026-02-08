@@ -21,8 +21,8 @@ jobs:
 
       - name: Create skill zip
         run: |
-          cd plugins/dotnet-nuget-proxy/skills/nuget-proxy-troubleshooting
-          zip -r "../../../../nuget-proxy-troubleshooting-${{ steps.version.outputs.VERSION }}.zip" \
+          cd skills/nuget-proxy-troubleshooting
+          zip -r "../../nuget-proxy-troubleshooting-${{ steps.version.outputs.VERSION }}.zip" \
             SKILL.md \
             files/
 

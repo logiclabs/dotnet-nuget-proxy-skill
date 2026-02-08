@@ -2,18 +2,18 @@
   "name": "dotnet-nuget-proxy",
   "owner": {
     "name": "LogicLabs",
-    "email": "community@claude.ai"
+    "url": "https://github.com/logiclabs"
   },
   "metadata": {
-    "description": "Claude Code plugins for .NET NuGet proxy authentication troubleshooting",
+    "description": "Enables .NET development in Claude Code web sessions by fixing NuGet proxy authentication via a C# credential provider plugin",
     "version": "1.0.0",
-    "pluginRoot": "./plugins"
+    "pluginRoot": "."
   },
   "plugins": [
     {
       "name": "dotnet-nuget-proxy",
-      "source": "./plugins/dotnet-nuget-proxy",
-      "description": "Diagnoses and fixes .NET NuGet proxy authentication issues in containerized and proxy-authenticated environments",
+      "source": ".",
+      "description": "Enables .NET development in Claude Code web sessions by fixing NuGet proxy authentication via a C# credential provider plugin",
       "version": "1.0.0",
       "author": {
         "name": "LogicLabs"

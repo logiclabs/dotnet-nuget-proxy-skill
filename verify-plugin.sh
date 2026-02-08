@@ -1,7 +1,7 @@
 #!/bin/bash
 # verify-plugin.sh - Verify plugin structure and readiness for publication
 
-echo "🔍 .NET NuGet Proxy Plugin - Structure Verification"
+echo "  .NET NuGet Proxy Plugin - Structure Verification"
 echo "=================================================="
 echo ""
 
@@ -14,118 +14,127 @@ NC='\033[0m' # No Color
 ERRORS=0
 WARNINGS=0
 
-# Check 1: plugin.json exists and is valid
-echo -n "Checking plugin.json... "
+# Check 1: Root plugin.json exists and is valid
+echo -n "Checking .claude-plugin/plugin.json... "
 if [ -f ".claude-plugin/plugin.json" ]; then
     if python3 -m json.tool < .claude-plugin/plugin.json > /dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC}"
+        echo -e "${GREEN}OK${NC}"
     else
-        echo -e "${RED}✗ Invalid JSON${NC}"
+        echo -e "${RED}FAIL - Invalid JSON${NC}"
         ERRORS=$((ERRORS + 1))
     fi
 else
-    echo -e "${RED}✗ Missing${NC}"
+    echo -e "${RED}FAIL - Missing${NC}"
     ERRORS=$((ERRORS + 1))
 fi
 
-# Check 2: Required directories
-echo -n "Checking directory structure... "
-if [ -d "skills" ] && [ -d "commands" ] && [ -d "hooks" ]; then
-    echo -e "${GREEN}✓${NC}"
+# Check 2: Marketplace config
+echo -n "Checking marketplace.json... "
+if [ -f ".claude-plugin/marketplace.json" ]; then
+    if python3 -m json.tool < .claude-plugin/marketplace.json > /dev/null 2>&1; then
+        echo -e "${GREEN}OK${NC}"
+    else
+        echo -e "${RED}FAIL - Invalid JSON${NC}"
+        ERRORS=$((ERRORS + 1))
+    fi
 else
-    echo -e "${RED}✗ Missing required directories${NC}"
+    echo -e "${RED}FAIL - Missing${NC}"
     ERRORS=$((ERRORS + 1))
 fi
 
 # Check 3: Skills
 echo -n "Checking skills... "
-SKILL_COUNT=$(find skills -name "SKILL.md" | wc -l)
+SKILL_COUNT=$(find "skills" -name "SKILL.md" 2>/dev/null | wc -l)
 if [ "$SKILL_COUNT" -gt 0 ]; then
-    echo -e "${GREEN}✓ Found $SKILL_COUNT skill(s)${NC}"
+    echo -e "${GREEN}OK - Found $SKILL_COUNT skill(s)${NC}"
 else
-    echo -e "${RED}✗ No skills found${NC}"
+    echo -e "${RED}FAIL - No skills found${NC}"
     ERRORS=$((ERRORS + 1))
 fi
 
-# Check 4: Commands
-echo -n "Checking commands... "
-CMD_COUNT=$(find commands -name "*.md" 2>/dev/null | wc -l)
-if [ "$CMD_COUNT" -gt 0 ]; then
-    echo -e "${GREEN}✓ Found $CMD_COUNT command(s)${NC}"
-else
-    echo -e "${YELLOW}⚠ No commands found${NC}"
-    WARNINGS=$((WARNINGS + 1))
-fi
-
-# Check 5: Hooks
+# Check 4: Hooks
 echo -n "Checking hooks... "
-HOOK_COUNT=$(find hooks -name "*.sh" 2>/dev/null | wc -l)
+HOOK_COUNT=$(find "hooks" -name "*.sh" 2>/dev/null | wc -l)
 if [ "$HOOK_COUNT" -gt 0 ]; then
-    echo -e "${GREEN}✓ Found $HOOK_COUNT hook(s)${NC}"
+    echo -e "${GREEN}OK - Found $HOOK_COUNT hook(s)${NC}"
 else
-    echo -e "${YELLOW}⚠ No hooks found${NC}"
+    echo -e "${YELLOW}WARN - No hooks found${NC}"
     WARNINGS=$((WARNINGS + 1))
 fi
 
-# Check 6: Documentation
+# Check 5: C# credential provider source
+echo -n "Checking credential provider source... "
+if [ -f "skills/nuget-proxy-troubleshooting/files/nuget-plugin-proxy-auth-src/Program.cs" ] && \
+   [ -f "skills/nuget-proxy-troubleshooting/files/nuget-plugin-proxy-auth-src/nuget-plugin-proxy-auth.csproj" ]; then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${RED}FAIL - Missing C# source files${NC}"
+    ERRORS=$((ERRORS + 1))
+fi
+
+# Check 6: Install script
+echo -n "Checking install script... "
+if [ -f "skills/nuget-proxy-troubleshooting/files/install-credential-provider.sh" ]; then
+    echo -e "${GREEN}OK${NC}"
+else
+    echo -e "${RED}FAIL - Missing install-credential-provider.sh${NC}"
+    ERRORS=$((ERRORS + 1))
+fi
+
+# Check 7: Documentation
 echo -n "Checking README.md... "
 if [ -f "README.md" ]; then
-    echo -e "${GREEN}✓${NC}"
+    echo -e "${GREEN}OK${NC}"
 else
-    echo -e "${RED}✗ Missing${NC}"
+    echo -e "${RED}FAIL - Missing${NC}"
     ERRORS=$((ERRORS + 1))
 fi
 
 echo -n "Checking CHANGELOG.md... "
 if [ -f "CHANGELOG.md" ]; then
-    echo -e "${GREEN}✓${NC}"
+    echo -e "${GREEN}OK${NC}"
 else
-    echo -e "${YELLOW}⚠ Missing${NC}"
+    echo -e "${YELLOW}WARN - Missing${NC}"
     WARNINGS=$((WARNINGS + 1))
 fi
 
 echo -n "Checking LICENSE... "
 if [ -f "LICENSE" ]; then
-    echo -e "${GREEN}✓${NC}"
+    echo -e "${GREEN}OK${NC}"
 else
-    echo -e "${RED}✗ Missing${NC}"
+    echo -e "${RED}FAIL - Missing${NC}"
     ERRORS=$((ERRORS + 1))
 fi
 
-# Check 7: Git
+# Check 8: Git
 echo -n "Checking git repository... "
 if [ -d ".git" ]; then
-    echo -e "${GREEN}✓${NC}"
+    echo -e "${GREEN}OK${NC}"
 else
-    echo -e "${RED}✗ Not a git repository${NC}"
+    echo -e "${RED}FAIL - Not a git repository${NC}"
     ERRORS=$((ERRORS + 1))
 fi
 
-# Check 8: Placeholders
-echo -n "Checking for placeholder URLs... "
-if grep -r "YOUR-USERNAME" . --exclude-dir=.git -q 2>/dev/null; then
-    echo -e "${YELLOW}⚠ Found placeholders (update before publishing)${NC}"
+# Check 9: No stale nested plugins directory
+echo -n "Checking for stale plugins/ directory... "
+if [ -d "plugins" ]; then
+    echo -e "${YELLOW}WARN - 'plugins/' exists (structure should be flat at root)${NC}"
     WARNINGS=$((WARNINGS + 1))
 else
-    echo -e "${GREEN}✓ No placeholders${NC}"
+    echo -e "${GREEN}OK - No stale nesting${NC}"
 fi
-
-# Check 9: File count
-echo -n "Counting files... "
-FILE_COUNT=$(find . -type f | grep -v .git | wc -l)
-echo -e "${GREEN}$FILE_COUNT files${NC}"
 
 # Summary
 echo ""
 echo "Summary:"
 echo "--------"
 if [ $ERRORS -eq 0 ] && [ $WARNINGS -eq 0 ]; then
-    echo -e "${GREEN}✓ All checks passed! Plugin is ready for publication.${NC}"
+    echo -e "${GREEN}All checks passed! Plugin is ready for publication.${NC}"
     exit 0
 elif [ $ERRORS -eq 0 ]; then
-    echo -e "${YELLOW}⚠ $WARNINGS warning(s). Review before publishing.${NC}"
+    echo -e "${YELLOW}$WARNINGS warning(s). Review before publishing.${NC}"
     exit 0
 else
-    echo -e "${RED}✗ $ERRORS error(s) found. Fix before publishing.${NC}"
+    echo -e "${RED}$ERRORS error(s) found. Fix before publishing.${NC}"
     exit 1
 fi

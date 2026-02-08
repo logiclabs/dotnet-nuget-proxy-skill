@@ -2,135 +2,86 @@
 
 This directory contains a proxy solution that enables `dotnet restore` and `dotnet build` to work in the Claude Code environment by handling proxy authentication automatically.
 
-## Quick Start
-
-### Option 1: Use the Wrapper Script (Recommended)
-
-Simply use the wrapper script instead of `dotnet`:
+## Quick Start (Recommended)
 
 ```bash
-./dotnet-with-proxy.sh restore
-./dotnet-with-proxy.sh build
-./dotnet-with-proxy.sh test
-```
+# Install the C# credential provider (compiles plugin, starts proxy, sets env vars)
+source install-credential-provider.sh
 
-The script will automatically:
-- Start the proxy if it's not running
-- Keep it running for future commands
-- Set the correct environment variables
-
-### Option 2: Create an Alias
-
-Source the alias setup script for convenient use:
-
-```bash
-source ./setup-dotnet-alias.sh
-```
-
-Now use `dotnet` commands normally:
-```bash
+# Then use dotnet normally - no wrapper scripts needed
 dotnet restore
 dotnet build
 dotnet test
 ```
 
-**To make the alias permanent**, add this line to your `~/.bashrc`:
-```bash
-alias dotnet='/home/user/testbed/dotnet-with-proxy.sh'
-```
-
-### Option 3: Manual Proxy + Environment Variables
-
-Start the proxy manually:
-```bash
-python3 nuget-proxy.py &
-```
-
-Then run dotnet with environment variables:
-```bash
-http_proxy=http://127.0.0.1:8888 \
-https_proxy=http://127.0.0.1:8888 \
-HTTP_PROXY=http://127.0.0.1:8888 \
-HTTPS_PROXY=http://127.0.0.1:8888 \
-dotnet build
-```
+The install script:
+- Compiles a C# NuGet credential provider plugin from `nuget-plugin-proxy-auth-src/`
+- Installs it to `~/.nuget/plugins/netcore/` where NuGet auto-discovers it
+- Saves the original upstream proxy URL to `_NUGET_UPSTREAM_PROXY`
+- Creates a `dotnet()` shell function that routes only dotnet traffic through `localhost:8888`
+- Starts the proxy daemon
+- Global `HTTPS_PROXY` stays unchanged — other tools (curl, apt, pip) are unaffected
 
 ## How It Works
 
-The solution consists of two key files:
+```
+NuGet -> localhost:8888 (proxy daemon) -> Upstream Proxy (JWT injected) -> nuget.org
+         [no auth required]               [Proxy-Authorization header]     [internet]
+```
 
-### 1. `nuget-proxy.py`
-A Python HTTP/HTTPS proxy that:
-- Listens on `localhost:8888`
-- Accepts connections from NuGet without authentication
-- Forwards requests to the Claude Code authenticated proxy
-- Handles HTTPS CONNECT tunneling for secure connections
-
-### 2. `NuGet.config`
-Configures NuGet to use the local proxy (this is optional with the wrapper script)
+The C# credential provider plugin:
+1. **Embeds a proxy server** that listens on `localhost:8888` without authentication
+2. **Injects JWT credentials** into upstream proxy CONNECT requests
+3. **Manages the proxy lifecycle** as a background daemon (start/stop/health check)
+4. **Implements the NuGet plugin protocol v2** so NuGet discovers it automatically
 
 ## Files
 
-- **`nuget-proxy.py`** - The proxy server implementation
-- **`dotnet-with-proxy.sh`** - Wrapper script that auto-starts proxy and runs dotnet
-- **`setup-dotnet-alias.sh`** - Creates a convenient alias for the current session
-- **`NuGet.config`** - NuGet configuration file
-- **`NUGET-PROXY-README.md`** - This file
+- **`nuget-plugin-proxy-auth-src/`** - C# source for the credential provider
+  - `Program.cs` - Single-file implementation (~725 lines)
+  - `nuget-plugin-proxy-auth.csproj` - .NET 8.0 project file
+- **`install-credential-provider.sh`** - Install script (compile, install, configure)
+- **`WHY-PROXY-BRIDGE-NEEDED.md`** - Technical analysis of why this approach is needed
 
 ## Managing the Proxy
 
-### Check if proxy is running:
 ```bash
-ps aux | grep nuget-proxy
-```
+# Check status
+dotnet ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth.dll --status
 
-### View proxy logs:
-```bash
-tail -f /tmp/nuget-proxy.log
-```
+# Start proxy manually
+dotnet ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth.dll --start
 
-### Stop the proxy:
-```bash
-kill $(cat /tmp/nuget-proxy.pid)
-```
-
-### Manually start proxy in foreground (for debugging):
-```bash
-python3 nuget-proxy.py
+# Stop proxy
+dotnet ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth.dll --stop
 ```
 
 ## Troubleshooting
 
-### Build fails with proxy errors
-1. Check if proxy is running: `ps aux | grep nuget-proxy`
-2. Check logs: `cat /tmp/nuget-proxy.log`
-3. Restart proxy: `pkill -f nuget-proxy.py && python3 nuget-proxy.py &`
+### Credential provider not found
+```bash
+# Recompile and install
+source install-credential-provider.sh
+```
 
-### Proxy won't start
-- Check if port 8888 is already in use: `lsof -i :8888`
-- Check proxy environment variables are set: `env | grep proxy`
+### Proxy not running
+```bash
+# Start it via the compiled plugin
+dotnet ~/.nuget/plugins/netcore/nuget-plugin-proxy-auth/nuget-plugin-proxy-auth.dll --start
+```
 
-### NuGet can't find packages
-- Ensure the proxy is running
-- Verify network connectivity through the proxy
-- Check that `api.nuget.org` is in the allowed hosts
+### Still getting 401 errors
+```bash
+# Check the upstream proxy is correctly saved
+echo $_NUGET_UPSTREAM_PROXY
+echo $PROXY_AUTHORIZATION
+
+# Check proxy logs
+cat /tmp/nuget-proxy.log
+```
 
 ## Why This is Needed
 
-The Claude Code environment requires all external network access to go through an authenticated proxy. However, NuGet doesn't handle this proxy authentication properly, resulting in 401 errors when trying to restore packages.
+NuGet's `HttpClient` / .NET's `SocketsHttpHandler` does not send `Proxy-Authorization` on the initial HTTPS CONNECT request. The proxy rejects the unauthenticated CONNECT with 401. This is a .NET runtime limitation ([dotnet/runtime #66244](https://github.com/dotnet/runtime/issues/66244)) with no fix in any current .NET version.
 
-This solution creates a local proxy that:
-1. Accepts unauthenticated connections from NuGet
-2. Adds the required authentication tokens
-3. Forwards requests to the Claude Code proxy
-
-This allows `dotnet` commands to work seamlessly in the Claude Code environment.
-
-## Performance
-
-The proxy adds minimal overhead:
-- Local connection to 127.0.0.1 (microseconds)
-- Single hop through the authenticated proxy
-- Persistent connections maintained for efficiency
-
-Typical package restore times are comparable to direct connections.
+See `WHY-PROXY-BRIDGE-NEEDED.md` for the full technical analysis.

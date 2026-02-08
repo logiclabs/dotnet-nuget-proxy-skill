@@ -57,3 +57,7 @@ obj/
 # Plugin development
 .claude-dev/
 *.zip
+
+# Project-level Claude settings (not part of the plugin package)
+# The plugin uses hooks/hooks.json for bundled hooks instead.
+.claude/settings.json

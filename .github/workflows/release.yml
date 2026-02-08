@@ -23,13 +23,15 @@ jobs:
         run: |
           zip -r "dotnet-nuget-proxy-skill-${{ steps.version.outputs.VERSION }}.zip" \
             .claude-plugin/ \
-            .claude/ \
             skills/ \
             hooks/ \
+            install.sh \
+            verify-plugin.sh \
             global.json \
             README.md \
             LICENSE \
-            CHANGELOG.md
+            CHANGELOG.md \
+            CONTRIBUTING.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

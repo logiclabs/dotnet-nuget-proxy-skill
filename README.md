@@ -28,7 +28,7 @@ A C# NuGet credential provider:
 
 ## Installation
 
-### Claude Code (Desktop or Web)
+### Claude Code (Desktop or Web) - NOT CURRENTLY WORKING
 
 ```
 /plugin marketplace add logiclabs/dotnet-nuget-proxy-skill

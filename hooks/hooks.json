@@ -1,0 +1,15 @@
+{
+  "description": "Auto-setup .NET SDK and NuGet proxy authentication in Claude Code web sessions",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

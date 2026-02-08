@@ -23,7 +23,6 @@ jobs:
         run: |
           zip -r "dotnet-nuget-proxy-skill-${{ steps.version.outputs.VERSION }}.zip" \
             .claude-plugin/ \
-            .claude/ \
             skills/ \
             hooks/ \
             install.sh \

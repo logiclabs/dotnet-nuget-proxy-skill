@@ -19,16 +19,21 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
-      - name: Create skill zip
+      - name: Create plugin zip
         run: |
-          cd skills/nuget-proxy-troubleshooting
-          zip -r "../../nuget-proxy-troubleshooting-${{ steps.version.outputs.VERSION }}.zip" \
-            SKILL.md \
-            files/
+          zip -r "dotnet-nuget-proxy-skill-${{ steps.version.outputs.VERSION }}.zip" \
+            .claude-plugin/ \
+            .claude/ \
+            skills/ \
+            hooks/ \
+            global.json \
+            README.md \
+            LICENSE \
+            CHANGELOG.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: "${{ steps.version.outputs.VERSION }}"
           generate_release_notes: true
-          files: "nuget-proxy-troubleshooting-${{ steps.version.outputs.VERSION }}.zip"
+          files: "dotnet-nuget-proxy-skill-${{ steps.version.outputs.VERSION }}.zip"

@@ -16,13 +16,7 @@
     "containerized",
     "enterprise"
   ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/logiclabs/dotnet-nuget-proxy-skill"
-  },
+  "repository": "https://github.com/logiclabs/dotnet-nuget-proxy-skill",
   "license": "MIT",
-  "homepage": "https://github.com/logiclabs/dotnet-nuget-proxy-skill#readme",
-  "bugs": {
-    "url": "https://github.com/logiclabs/dotnet-nuget-proxy-skill/issues"
-  }
+  "homepage": "https://github.com/logiclabs/dotnet-nuget-proxy-skill#readme"
 }

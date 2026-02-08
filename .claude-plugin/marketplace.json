@@ -12,8 +12,10 @@
   "plugins": [
     {
       "name": "dotnet-nuget-proxy",
-      "source": "github",
-      "repo": "logiclabs/dotnet-nuget-proxy-skill",
+      "source": {
+        "source": "github",
+        "repo": "logiclabs/dotnet-nuget-proxy-skill"
+      },
       "description": "Enables .NET development in Claude Code web sessions by fixing NuGet proxy authentication via a C# credential provider plugin",
       "version": "1.0.0",
       "author": {

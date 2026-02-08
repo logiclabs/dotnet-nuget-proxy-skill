@@ -45,6 +45,16 @@ git clone https://github.com/logiclabs/dotnet-nuget-proxy-skill ~/.claude/plugin
 
 For .NET projects, add a SessionStart hook so the SDK and proxy are ready automatically when a Claude Code web session starts.
 
+### Slash Command (Recommended)
+
+If you already have the plugin installed, run this in a Claude Code session inside your project:
+
+```
+/install-dotnet-web
+```
+
+Claude will download the plugin files into `.claude/plugins/dotnet-nuget-proxy-skill/`, configure the SessionStart hook in `.claude/settings.json`, and tell you what to commit.
+
 ### One-Line Install
 
 Run this from your project directory:

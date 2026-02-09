@@ -42,7 +42,7 @@ TARGET_DIR="$(cd "$TARGET_DIR" && pwd)"
 
 PLUGIN_DEST="$TARGET_DIR/.claude/plugins/$PLUGIN_NAME"
 SETTINGS_FILE="$TARGET_DIR/.claude/settings.json"
-HOOK_COMMAND="\"\$CLAUDE_PROJECT_DIR\"/.claude/plugins/$PLUGIN_NAME/hooks/session-start.sh"
+HOOK_COMMAND="bash \"\$CLAUDE_PROJECT_DIR\"/.claude/plugins/$PLUGIN_NAME/hooks/session-start.sh"
 
 log ""
 log ".NET NuGet Proxy Plugin Installer"

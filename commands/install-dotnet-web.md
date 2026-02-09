@@ -1,12 +1,10 @@
 ---
-name: install-dotnet-web
 description: Install the .NET NuGet proxy plugin into the current project and configure the SessionStart hook for automatic .NET setup in Claude Code web sessions.
-user-invocable: true
 ---
 
 # Install .NET Web Support for Claude Code
 
-This skill installs the .NET NuGet proxy plugin into the current project so that future Claude Code web sessions automatically have the .NET SDK and NuGet proxy authentication ready.
+This command installs the .NET NuGet proxy plugin into the current project so that future Claude Code web sessions automatically have the .NET SDK and NuGet proxy authentication ready.
 
 ## What Gets Installed
 

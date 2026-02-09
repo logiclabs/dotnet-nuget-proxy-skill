@@ -57,7 +57,7 @@ The hook entry to add to `hooks.SessionStart`:
   "hooks": [
     {
       "type": "command",
-      "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/plugins/dotnet-nuget-proxy-skill/hooks/session-start.sh"
+      "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/plugins/dotnet-nuget-proxy-skill/hooks/session-start.sh"
     }
   ]
 }
@@ -71,7 +71,7 @@ import json, os
 f = '.claude/settings.json'
 s = json.load(open(f)) if os.path.exists(f) else {}
 s.setdefault('hooks', {}).setdefault('SessionStart', [])
-cmd = '\"\\$CLAUDE_PROJECT_DIR\"/.claude/plugins/dotnet-nuget-proxy-skill/hooks/session-start.sh'
+cmd = 'bash \"\\$CLAUDE_PROJECT_DIR\"/.claude/plugins/dotnet-nuget-proxy-skill/hooks/session-start.sh'
 exists = any(h.get('command') == cmd for e in s['hooks']['SessionStart'] for h in e.get('hooks', []))
 if not exists:
     s['hooks']['SessionStart'].append({'hooks': [{'type': 'command', 'command': cmd}]})

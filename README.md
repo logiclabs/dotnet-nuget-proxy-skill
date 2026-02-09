@@ -27,8 +27,10 @@ A C# NuGet credential provider:
 - Implements the NuGet cross-platform plugin protocol v2
 
 ## Installation
+The following installs a plugin to your machine, user profile or project (you'll be asked by Claude). This can then be used to install
+a session start hook that sets up a .NET environment in your repo/project for when used in Claude Code web.
 
-### Claude Code (Desktop or Web) - NOT CURRENTLY WORKING
+### Claude Code (CLI)
 
 ```
 /plugin marketplace add logiclabs/dotnet-nuget-proxy-skill
